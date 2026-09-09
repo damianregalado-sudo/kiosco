@@ -1,0 +1,190 @@
+:root {
+  --azul: #1a73e8;
+  --verde: #1e8e3e;
+  --rojo: #d93025;
+  --gris: #5f6368;
+  --fondo: #f1f3f4;
+  --tarjeta: #ffffff;
+  --borde: #dadce0;
+  --alto-nav: 64px;
+}
+* { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+html, body { margin: 0; padding: 0; }
+body {
+  font-family: -apple-system, "Segoe UI", Roboto, Arial, sans-serif;
+  background: var(--fondo);
+  color: #202124;
+  font-size: 17px;
+  padding-bottom: var(--alto-nav);
+}
+
+/* ---------- Topbar ---------- */
+#topbar {
+  position: sticky; top: 0; z-index: 20;
+  background: var(--azul); color: #fff;
+  display: flex; align-items: center; justify-content: space-between;
+  padding: 10px 14px; gap: 10px;
+}
+#kioscoNombre { font-weight: 700; font-size: 18px; }
+#vendedorBox { display: flex; align-items: center; gap: 6px; font-size: 14px; }
+#vendedorBox select {
+  font-size: 15px; padding: 6px 8px; border-radius: 8px; border: none;
+  background: #fff; color: #202124; max-width: 130px;
+}
+
+main { padding: 12px; max-width: 640px; margin: 0 auto; }
+.screen { display: none; }
+.screen.activa { display: block; }
+
+/* ---------- Botones ---------- */
+.btn {
+  display: inline-flex; align-items: center; justify-content: center; gap: 6px;
+  border: none; border-radius: 12px; padding: 12px 16px;
+  font-size: 17px; font-weight: 600; cursor: pointer;
+  background: #e8eaed; color: #202124;
+}
+.btn:active { filter: brightness(0.93); }
+.btn.grande { padding: 16px; font-size: 19px; width: 100%; }
+.btn.ancho { width: 100%; margin-bottom: 10px; }
+.btn.primario { background: var(--azul); color: #fff; }
+.btn.exito { background: var(--verde); color: #fff; }
+.btn.peligro { background: var(--rojo); color: #fff; }
+.btn.chico { padding: 10px 12px; font-size: 15px; }
+.btn.texto { background: none; color: var(--gris); font-weight: 500; width: 100%; margin-top: 4px; }
+
+input, select, textarea {
+  font-family: inherit; font-size: 17px;
+  padding: 12px; border: 1px solid var(--borde); border-radius: 10px;
+  width: 100%; background: #fff;
+}
+
+/* ---------- Pantalla de configuración inicial ---------- */
+#gate {
+  position: fixed; inset: 0; z-index: 100; background: var(--fondo);
+  display: flex; align-items: center; justify-content: center; padding: 20px;
+}
+#gate .caja {
+  background: #fff; border: 1px solid var(--borde); border-radius: 16px;
+  padding: 22px; max-width: 460px; width: 100%;
+}
+#gate h2 { margin: 0 0 6px; }
+#gate p { color: var(--gris); font-size: 14px; margin: 0 0 14px; }
+#gate input { margin-bottom: 12px; }
+
+/* ---------- Vender ---------- */
+.acciones-escaneo { display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.lector { margin: 10px 0; border-radius: 12px; overflow: hidden; background: #000; }
+.lector.oculto, .oculto { display: none !important; }
+
+.lista-resultados { display: flex; flex-direction: column; gap: 6px; }
+.lista-resultados .item {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 10px 12px; display: flex; justify-content: space-between; align-items: center;
+}
+.lista-resultados .item small { color: var(--gris); display: block; }
+
+#carrito { margin-top: 10px; display: flex; flex-direction: column; gap: 8px; }
+.linea {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+  padding: 10px 12px; display: grid; grid-template-columns: 1fr auto; gap: 6px 10px;
+}
+.linea .nom { font-weight: 600; }
+.linea .pu { color: var(--gris); font-size: 14px; }
+.linea .sub { font-weight: 700; text-align: right; }
+.linea .cant { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; }
+.linea .cant button {
+  width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--borde);
+  background: #fff; font-size: 22px; font-weight: 700; line-height: 1;
+}
+.linea .cant .q { min-width: 28px; text-align: center; font-weight: 700; }
+.linea .quitar { background: none; border: none; color: var(--rojo); font-size: 14px; }
+
+.pie-venta {
+  position: sticky; bottom: calc(var(--alto-nav) + 6px); z-index: 10;
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 14px;
+  padding: 12px; margin-top: 12px; box-shadow: 0 4px 16px rgba(0,0,0,0.12);
+}
+.total-fila { display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 10px; }
+.total-fila strong { font-size: 26px; color: var(--verde); }
+
+/* ---------- Tarjetas (productos / clientes) ---------- */
+#filtroProd, #buscarProd { margin-bottom: 10px; }
+.tarjetas { display: flex; flex-direction: column; gap: 8px; margin-top: 10px; }
+.tarjeta {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px;
+  padding: 12px; display: flex; justify-content: space-between; align-items: center; gap: 10px;
+}
+.tarjeta .info { min-width: 0; }
+.tarjeta .info b { display: block; }
+.tarjeta .info small { color: var(--gris); }
+.tarjeta .stock-bajo { color: var(--rojo); font-weight: 700; }
+.saldo-pos { color: var(--rojo); font-weight: 700; }
+.saldo-cero { color: var(--verde); font-weight: 700; }
+
+/* ---------- Caja ---------- */
+.caja-fecha { display: flex; gap: 8px; margin-bottom: 12px; }
+.caja-fecha input { flex: 1; }
+.caja-resumen { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.caja-resumen .celda {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 12px; padding: 12px;
+}
+.caja-resumen .celda small { color: var(--gris); display: block; margin-bottom: 4px; }
+.caja-resumen .celda b { font-size: 20px; }
+.caja-resumen .destacada { grid-column: 1 / -1; background: #e6f4ea; border-color: #1e8e3e55; }
+.caja-resumen .destacada b { font-size: 26px; color: var(--verde); }
+.caja-botones { display: flex; gap: 8px; margin: 12px 0; }
+.caja-botones .btn { flex: 1; }
+#cajaDetalle h4 { margin: 16px 0 6px; color: var(--gris); font-size: 14px; text-transform: uppercase; }
+.fila-detalle {
+  background: var(--tarjeta); border: 1px solid var(--borde); border-radius: 10px;
+  padding: 9px 12px; display: flex; justify-content: space-between; gap: 8px; margin-bottom: 6px;
+  font-size: 15px;
+}
+.fila-detalle .anulada { text-decoration: line-through; color: var(--gris); }
+.mini-btn { background: none; border: 1px solid var(--borde); border-radius: 8px; padding: 4px 8px; font-size: 13px; color: var(--rojo); }
+
+/* ---------- Tabbar ---------- */
+#tabbar {
+  position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
+  height: var(--alto-nav); background: #fff; border-top: 1px solid var(--borde);
+  display: flex;
+}
+#tabbar .tab {
+  flex: 1; border: none; background: none; color: var(--gris);
+  font-size: 22px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px;
+}
+#tabbar .tab span { font-size: 11px; font-weight: 600; }
+#tabbar .tab.activa { color: var(--azul); }
+
+/* ---------- Modal ---------- */
+.overlay {
+  position: fixed; inset: 0; background: rgba(0,0,0,0.45); z-index: 40;
+  display: flex; align-items: flex-end; justify-content: center;
+}
+.modal {
+  background: #fff; width: 100%; max-width: 560px;
+  border-radius: 18px 18px 0 0; padding: 18px; max-height: 90vh; overflow-y: auto;
+}
+.modal h3 { margin: 0 0 12px; }
+.modal .campo { margin-bottom: 12px; }
+.modal .campo label { display: block; font-size: 14px; color: var(--gris); margin-bottom: 4px; }
+.modal .fila-botones { display: flex; gap: 8px; margin-top: 6px; }
+.modal .fila-botones .btn { flex: 1; }
+.vuelto-grande { text-align: center; font-size: 22px; margin: 10px 0; }
+.vuelto-grande b { display: block; font-size: 44px; color: var(--verde); }
+
+.opciones-pago { display: flex; gap: 8px; margin-bottom: 12px; }
+.opciones-pago button {
+  flex: 1; padding: 14px; border-radius: 12px; border: 2px solid var(--borde);
+  background: #fff; font-weight: 700; font-size: 16px;
+}
+.opciones-pago button.sel { border-color: var(--azul); background: #e8f0fe; color: var(--azul); }
+
+/* ---------- Toast ---------- */
+.toast {
+  position: fixed; left: 50%; transform: translateX(-50%);
+  bottom: calc(var(--alto-nav) + 16px); z-index: 50;
+  background: #202124; color: #fff; padding: 12px 18px; border-radius: 10px;
+  font-size: 15px; max-width: 90%; text-align: center;
+}
+.toast.error { background: var(--rojo); }
