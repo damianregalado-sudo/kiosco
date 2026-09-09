@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+  <meta name="theme-color" content="#1a73e8">
+  <title>Kiosco</title>
+  <link rel="stylesheet" href="estilos.css">
+</head>
+<body>
+
+  <!-- ============ CONFIGURACIÓN INICIAL (se muestra si falta la URL) ============ -->
+  <div id="gate" class="oculto">
+    <div class="caja">
+      <h2>Configurar la app</h2>
+      <p>Pegá la dirección de tu aplicación de Google (la que termina en <b>/exec</b>).
+         Se guarda en este teléfono, no hay que volver a ponerla.</p>
+      <input id="gateUrl" type="url" inputmode="url" autocomplete="off"
+             placeholder="https://script.google.com/macros/s/.../exec">
+      <button id="gateOk" class="btn primario grande">Guardar y entrar</button>
+      <p id="gateMsg" style="color:#d93025"></p>
+    </div>
+  </div>
+
+  <!-- ============ APP ============ -->
+  <div id="app" class="oculto">
+    <header id="topbar">
+      <div id="kioscoNombre">Kiosco</div>
+      <label id="vendedorBox">
+        <span>Vende:</span>
+        <select id="selVendedor"></select>
+      </label>
+    </header>
+
+    <main>
+      <!-- VENDER -->
+      <section id="scr-vender" class="screen activa">
+        <div class="acciones-escaneo">
+          <button id="btnEscanear" class="btn grande primario">📷 Escanear</button>
+          <button id="btnFoto" class="btn">🖼️ Foto al código (si la cámara no abre)</button>
+          <input id="buscarProd" type="search" placeholder="o buscar por nombre / código…" autocomplete="off">
+        </div>
+        <input id="fotoCodigo" type="file" accept="image/*" capture="environment" class="oculto">
+        <div id="resultadosBusqueda" class="lista-resultados"></div>
+
+        <div id="lector" class="lector oculto"></div>
+        <div id="lector-foto" class="oculto"></div>
+
+        <div id="carrito"></div>
+
+        <div id="pie-venta" class="pie-venta oculto">
+          <div class="total-fila"><span>Total</span><strong id="totalCarrito">$0</strong></div>
+          <button id="btnCobrar" class="btn grande exito">Cobrar</button>
+          <button id="btnVaciar" class="btn texto">Vaciar carrito</button>
+        </div>
+      </section>
+
+      <!-- PRODUCTOS -->
+      <section id="scr-productos" class="screen">
+        <button id="btnNuevoProd" class="btn primario ancho">+ Nuevo producto</button>
+        <input id="filtroProd" type="search" placeholder="Buscar producto…" autocomplete="off">
+        <div id="listaProductos" class="tarjetas"></div>
+      </section>
+
+      <!-- CLIENTES -->
+      <section id="scr-clientes" class="screen">
+        <button id="btnNuevoCli" class="btn primario ancho">+ Nuevo cliente</button>
+        <div id="listaClientes" class="tarjetas"></div>
+      </section>
+
+      <!-- CAJA -->
+      <section id="scr-caja" class="screen">
+        <div class="caja-fecha">
+          <input id="cajaFecha" type="date">
+          <button id="btnVerCaja" class="btn primario">Ver</button>
+        </div>
+        <div id="cajaResumen" class="caja-resumen"></div>
+        <div class="caja-botones">
+          <button id="btnIngreso" class="btn chico">+ Ingreso</button>
+          <button id="btnEgreso" class="btn chico">– Egreso / gasto</button>
+        </div>
+        <div id="cajaDetalle"></div>
+        <button id="btnConfig" class="btn texto" style="margin-top:20px">⚙️ Cambiar dirección del servidor</button>
+      </section>
+    </main>
+
+    <nav id="tabbar">
+      <button data-scr="vender" class="tab activa">🛒<span>Vender</span></button>
+      <button data-scr="productos" class="tab">📦<span>Productos</span></button>
+      <button data-scr="clientes" class="tab">👥<span>Clientes</span></button>
+      <button data-scr="caja" class="tab">💵<span>Caja</span></button>
+    </nav>
+
+    <div id="overlay" class="overlay oculto"><div id="modal" class="modal"></div></div>
+    <div id="toast" class="toast oculto"></div>
+  </div>
+
+  <script src="html5-qrcode.min.js"></script>
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
