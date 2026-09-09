@@ -153,18 +153,31 @@ window.addEventListener('load', function () {
   iniciarApp();
 });
 
+function aplicarDatos(d, deCache) {
+  DATA = d;
+  $('#kioscoNombre').textContent = d.nombre_kiosco;
+  llenarVendedores();
+  renderProductos();
+  renderClientes();
+}
+
 function iniciarApp() {
   $('#cajaFecha').value = hoyISO();
 
+  // Mostrar al toque lo último que se vio (así no arranca vacío mientras consulta)
+  var hayCache = false;
+  try {
+    var c = localStorage.getItem('kiosco_cache');
+    if (c) { aplicarDatos(JSON.parse(c), true); hayCache = true; }
+  } catch (e) {}
+  if (!hayCache) $('#listaProductos').innerHTML = '<p style="color:#5f6368">Cargando productos…</p>';
+
   call('getBootstrap').then(function (d) {
-    DATA = d;
-    $('#kioscoNombre').textContent = d.nombre_kiosco;
-    llenarVendedores();
-    renderProductos();
-    renderClientes();
+    aplicarDatos(d, false);
     verCaja();
+    try { localStorage.setItem('kiosco_cache', JSON.stringify(d)); } catch (e) {}
   }).catch(function (e) {
-    toast('No se pudo conectar: ' + msg(e), true);
+    toast(hayCache ? 'Sin conexión: mostrando datos guardados.' : ('No se pudo conectar: ' + msg(e)), true);
   });
 
   $all('#tabbar .tab').forEach(function (b) {
@@ -227,10 +240,13 @@ function llenarVendedores() {
   try { guardado = localStorage.getItem('vendedor') || ''; } catch (e) {}
   if (guardado && DATA.vendedores.indexOf(guardado) >= 0) sel.value = guardado;
   vendedor = sel.value || DATA.vendedores[0] || '';
-  sel.addEventListener('change', function () {
-    vendedor = sel.value;
-    try { localStorage.setItem('vendedor', vendedor); } catch (e) {}
-  });
+  if (!sel._lista) {
+    sel._lista = true;
+    sel.addEventListener('change', function () {
+      vendedor = sel.value;
+      try { localStorage.setItem('vendedor', vendedor); } catch (e) {}
+    });
+  }
 }
 
 // ============================================================
@@ -495,6 +511,7 @@ function abrirCobro() {
       DATA.clientes = r.clientes;
       cart = [];
       renderCarrito(); renderProductos(); renderClientes();
+      if (escaneando) pararEscaner();
       mostrarComprobante(r);
     }).catch(function (e) { cargando(btn, false); toast(msg(e), true); });
   });
