@@ -1,15 +1,20 @@
 // ============================================================
 //  CONFIGURACIÓN DE LA APP
 // ============================================================
-// API_URL: la dirección de tu Apps Script (la que termina en /exec).
-//   - Podés pegarla acá y publicar de nuevo, O
-//   - dejarla como está: la primera vez que abras la app en el teléfono
-//     te la va a pedir y la guarda en ese teléfono.
+// Este archivo NO lleva datos sensibles (el repo es público).
 //
-// TOKEN: tiene que ser EXACTAMENTE el mismo que el de apps-script/Codigo.gs.
+// La dirección del servidor y la clave (token) se cargan en cada
+// teléfono la primera vez, de dos formas:
+//   1) Abriendo el "link de configuración":
+//        https://TU_USUARIO.github.io/kiosco/#api=<URL/exec>&token=<TOKEN>
+//      La app los guarda y limpia el link solo.
+//   2) A mano, en la pantalla de configuración que aparece al abrir la app.
+//
+// Quedan guardados en ese teléfono (localStorage). Para cambiarlos:
+// pestaña Caja -> "Cambiar la conexión con el servidor".
 // ============================================================
 
 window.CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbywe1sRwVka9qmKyIBqjtWiS-amEwlRobkrgF5Rpif8jTN2SZ8w1NOPdu67BHIPjVSr6Q/exec',
-  TOKEN: 'kio_2StaCqxRg8Ifc5LvE9nSxQu'
+  API_URL: '',
+  TOKEN: ''
 };
