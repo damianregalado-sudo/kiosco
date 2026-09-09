@@ -44,6 +44,9 @@ main { padding: 12px; max-width: 640px; margin: 0 auto; }
   background: #e8eaed; color: #202124;
 }
 .btn:active { filter: brightness(0.93); }
+.btn:disabled { opacity: 0.75; cursor: default; }
+.btn.cargando { animation: pulso 1.1s ease-in-out infinite; }
+@keyframes pulso { 0%,100% { opacity: 0.6; } 50% { opacity: 1; } }
 .btn.grande { padding: 16px; font-size: 19px; width: 100%; }
 .btn.ancho { width: 100%; margin-bottom: 10px; }
 .btn.primario { background: var(--azul); color: #fff; }
