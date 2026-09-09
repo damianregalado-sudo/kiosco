@@ -37,10 +37,18 @@ function beep() {
   if (navigator.vibrate) navigator.vibrate(60);
 }
 
-function cargando(btn, on) {
+function cargando(btn, on, label) {
   if (!btn) return;
-  if (on) { btn._txt = btn.textContent; btn.disabled = true; btn.textContent = '…'; }
-  else { btn.disabled = false; if (btn._txt) btn.textContent = btn._txt; }
+  if (on) {
+    btn._txt = btn.textContent;
+    btn.disabled = true;
+    btn.classList.add('cargando');
+    btn.textContent = (label || 'Guardando') + '…  ⏳';
+  } else {
+    btn.disabled = false;
+    btn.classList.remove('cargando');
+    if (btn._txt) btn.textContent = btn._txt;
+  }
 }
 
 function msg(e) { return (e && e.message) ? e.message : String(e); }
@@ -80,16 +88,19 @@ function api(action, data, metodo) {
     });
     pedido = fetch(url + '?' + qs, { method: 'GET', redirect: 'follow' });
   }
+  var lento = setTimeout(function () { toast('Tardando más de lo normal… esperá, no toques de nuevo.'); }, 7000);
   return pedido
     .then(function (r) { return r.text(); })
     .then(function (txt) {
+      clearTimeout(lento);
       var j;
       try { j = JSON.parse(txt); }
-      catch (e) { throw new Error('El servidor no respondió JSON. ¿La dirección es correcta y está implementada como API?'); }
+      catch (e) { throw new Error('El servidor no respondió bien. Revisá que el Apps Script esté implementado y la dirección sea correcta.'); }
       if (!j || j.ok !== true) throw new Error((j && j.error) || 'Error del servidor');
       return j.data;
     })
     .catch(function (e) {
+      clearTimeout(lento);
       if (e instanceof TypeError) throw new Error('No hay conexión con el servidor. Revisá internet o la dirección configurada.');
       throw e;
     });
@@ -504,11 +515,11 @@ function abrirCobro() {
     };
     if (formaSel === 'cuenta' && !payload.id_cliente) { toast('Elegí el cliente.', true); return; }
 
-    cargando(this, true);
+    cargando(this, true, 'Registrando venta');
     var btn = this;
     call('registrarVenta', payload).then(function (r) {
-      DATA.productos = r.productos;
-      DATA.clientes = r.clientes;
+      if (r.productos) DATA.productos = r.productos;
+      if (r.clientes) DATA.clientes = r.clientes;
       cart = [];
       renderCarrito(); renderProductos(); renderClientes();
       if (escaneando) pararEscaner();
