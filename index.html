@@ -13,10 +13,13 @@
   <div id="gate" class="oculto">
     <div class="caja">
       <h2>Configurar la app</h2>
-      <p>Pegá la dirección de tu aplicación de Google (la que termina en <b>/exec</b>).
-         Se guarda en este teléfono, no hay que volver a ponerla.</p>
+      <p>Lo más fácil: abrí el <b>link de configuración</b> que te pasaron y esto se
+         completa solo. Si no, pegá los dos datos acá (se guardan en este teléfono).</p>
+      <label style="font-size:13px;color:#5f6368">Dirección del servidor (termina en /exec)</label>
       <input id="gateUrl" type="url" inputmode="url" autocomplete="off"
              placeholder="https://script.google.com/macros/s/.../exec">
+      <label style="font-size:13px;color:#5f6368">Clave (token)</label>
+      <input id="gateToken" type="text" autocomplete="off" placeholder="kio_...">
       <button id="gateOk" class="btn primario grande">Guardar y entrar</button>
       <p id="gateMsg" style="color:#d93025"></p>
     </div>

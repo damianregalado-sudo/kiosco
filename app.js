@@ -52,26 +52,29 @@ function hoyISO() {
 // ============================================================
 //  CONEXIÓN CON EL SERVIDOR (Apps Script)
 // ============================================================
-function apiUrl() {
-  var u = '';
-  try { u = localStorage.getItem('kiosco_api_url') || ''; } catch (e) {}
-  if (!u && window.CONFIG && /^https?:\/\//.test(CONFIG.API_URL || '')) u = CONFIG.API_URL;
-  return u;
+function _cfg(clave, valorConfig) {
+  var v = '';
+  try { v = localStorage.getItem(clave) || ''; } catch (e) {}
+  if (!v && window.CONFIG && valorConfig) v = valorConfig;
+  return v;
 }
+function apiUrl() { return _cfg('kiosco_api_url', window.CONFIG && CONFIG.API_URL); }
+function apiToken() { return _cfg('kiosco_token', window.CONFIG && CONFIG.TOKEN); }
 
 function api(action, data, metodo) {
   var url = apiUrl();
-  if (!url) return Promise.reject(new Error('Falta configurar la dirección del servidor.'));
+  var token = apiToken();
+  if (!url || !token) return Promise.reject(new Error('Falta configurar la dirección del servidor.'));
   var pedido;
   if (metodo === 'POST') {
     pedido = fetch(url, {
       method: 'POST',
       redirect: 'follow',
       headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // "simple request": sin preflight
-      body: JSON.stringify({ token: CONFIG.TOKEN, action: action, data: data || {} })
+      body: JSON.stringify({ token: token, action: action, data: data || {} })
     });
   } else {
-    var qs = 'token=' + encodeURIComponent(CONFIG.TOKEN) + '&action=' + encodeURIComponent(action);
+    var qs = 'token=' + encodeURIComponent(token) + '&action=' + encodeURIComponent(action);
     Object.keys(data || {}).forEach(function (k) {
       if (data[k] !== undefined && data[k] !== null) qs += '&' + encodeURIComponent(k) + '=' + encodeURIComponent(data[k]);
     });
@@ -115,22 +118,36 @@ function call(fn) {
 //  ARRANQUE + PANTALLA DE CONFIGURACIÓN
 // ============================================================
 window.addEventListener('load', function () {
-  var pre = '';
-  try { pre = localStorage.getItem('kiosco_api_url') || ''; } catch (e) {}
-  if (!pre && window.CONFIG && /^https?:\/\//.test(CONFIG.API_URL || '')) pre = CONFIG.API_URL;
-  $('#gateUrl').value = pre;
+  // Configuración por link: .../#api=<URL>&token=<TOKEN>  (se guarda y se limpia de la barra)
+  try {
+    var h = (location.hash || '').replace(/^#/, '');
+    if (h) {
+      var pr = new URLSearchParams(h);
+      if (pr.get('api')) localStorage.setItem('kiosco_api_url', pr.get('api').trim());
+      if (pr.get('token')) localStorage.setItem('kiosco_token', pr.get('token').trim());
+      if (pr.get('api') || pr.get('token')) history.replaceState(null, '', location.pathname);
+    }
+  } catch (e) {}
+
+  $('#gateUrl').value = apiUrl();
+  $('#gateToken').value = apiToken();
 
   $('#gateOk').addEventListener('click', function () {
     var u = ($('#gateUrl').value || '').trim();
+    var t = ($('#gateToken').value || '').trim();
     if (!/^https:\/\/script\.google\.com\/macros\/s\/[\w-]+\/exec$/.test(u)) {
-      $('#gateMsg').textContent = 'Tiene que empezar con https://script.google.com/macros/s/… y terminar en /exec';
+      $('#gateMsg').textContent = 'La dirección tiene que empezar con https://script.google.com/macros/s/… y terminar en /exec';
       return;
     }
-    try { localStorage.setItem('kiosco_api_url', u); } catch (e) {}
+    if (!t) { $('#gateMsg').textContent = 'Falta la clave (token).'; return; }
+    try {
+      localStorage.setItem('kiosco_api_url', u);
+      localStorage.setItem('kiosco_token', t);
+    } catch (e) {}
     location.reload();
   });
 
-  if (!apiUrl()) { $('#gate').classList.remove('oculto'); return; }
+  if (!apiUrl() || !apiToken()) { $('#gate').classList.remove('oculto'); return; }
 
   $('#app').classList.remove('oculto');
   iniciarApp();
@@ -176,8 +193,8 @@ function iniciarApp() {
   $('#btnIngreso').addEventListener('click', function () { formMovimiento('ingreso'); });
   $('#btnEgreso').addEventListener('click', function () { formMovimiento('egreso'); });
   $('#btnConfig').addEventListener('click', function () {
-    if (confirm('¿Cambiar la dirección del servidor? Vas a tener que pegarla de nuevo.')) {
-      try { localStorage.removeItem('kiosco_api_url'); } catch (e) {}
+    if (confirm('¿Cambiar la conexión con el servidor? Vas a tener que pegar la dirección y la clave de nuevo.')) {
+      try { localStorage.removeItem('kiosco_api_url'); localStorage.removeItem('kiosco_token'); } catch (e) {}
       location.reload();
     }
   });
