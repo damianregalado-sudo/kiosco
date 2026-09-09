@@ -12,9 +12,13 @@ ventas en efectivo o fiado, cuenta corriente, stock y caja del día.
 Teléfono (GitHub Pages)  ──fetch()──►  Apps Script Web App  ──►  Google Sheet
 ```
 
-## Para dejarlo funcionando
+## Estado: PUBLICADO ✅
 
-Ver **[MAÑANA.md](MAÑANA.md)** — checklist de ~20 min (Google + GitHub + conectar).
+- App: **https://damianregalado-sudo.github.io/kiosco/**
+- Repo: https://github.com/damianregalado-sudo/kiosco (público, sin secretos)
+- Backend: Apps Script sobre la planilla, en modo API
+
+Para poner la app en los teléfonos y todo lo demás, ver **[MAÑANA.md](MAÑANA.md)**.
 
 ## Archivos
 
