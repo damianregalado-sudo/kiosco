@@ -113,6 +113,7 @@ function call(fn) {
     case 'getBootstrap':        return api('bootstrap', {}, 'GET');
     case 'buscarProducto':      return api('buscarProducto', { codigo: a[0] }, 'GET');
     case 'guardarProducto':     return api('guardarProducto', a[0], 'POST');
+    case 'eliminarProducto':    return api('eliminarProducto', { codigo: a[0] }, 'POST');
     case 'ajustarStock':        return api('ajustarStock', { codigo: a[0], delta: a[1] }, 'POST');
     case 'guardarCliente':      return api('guardarCliente', a[0], 'POST');
     case 'registrarVenta':      return api('registrarVenta', a[0], 'POST');
@@ -588,10 +589,23 @@ function formProducto(p) {
     '<div class="fila-botones">' +
       '<button class="btn" id="pCancelar">Cancelar</button>' +
       '<button class="btn exito" id="pGuardar">Guardar</button>' +
-    '</div>'
+    '</div>' +
+    (esNuevo ? '' : '<button class="btn peligro ancho" id="pEliminar" style="margin-top:10px">🗑 Eliminar producto</button>')
   );
 
   function ponerCodigo(cod) { $('#pCodigo').value = cod; toast('Código: ' + cod); }
+  var pel = $('#pEliminar');
+  if (pel) pel.addEventListener('click', function () {
+    if (!confirm('¿Eliminar "' + p.nombre + '" de la lista?\n\nLas ventas viejas de este producto NO se tocan. Si solo querés dejar de venderlo, destildá "Se vende" en vez de borrarlo.')) return;
+    cargando(this, true, 'Eliminando');
+    var b = this;
+    call('eliminarProducto', p.codigo).then(function (r) {
+      if (r.productos) DATA.productos = r.productos;
+      renderProductos();
+      cerrarModal();
+      toast('Producto eliminado');
+    }).catch(function (e) { cargando(b, false); toast(msg(e), true); });
+  });
   var pe = $('#pEscanear');
   if (pe) pe.addEventListener('click', function () { escanearUnaVez(ponerCodigo); });
   var pf = $('#pFoto');
