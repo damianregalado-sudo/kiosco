@@ -279,7 +279,8 @@ function verEstadoSync() {
   var verInfo = '<p style="font-size:13px;color:' + (backendVersion && backendVersion !== APP_VERSION ? '#d93025;font-weight:600' : '#5f6368') + '">' +
     'Versión app: ' + esc(APP_VERSION) + ' · Versión planilla: ' + esc(backendVersion || '(sin datos todavía)') +
     (backendVersion && backendVersion !== APP_VERSION ? '<br>No coinciden: pegá el Codigo.gs más nuevo en Apps Script e Implementá una Nueva versión.' : '') +
-    '</p>';
+    '</p>' +
+    '<p style="font-size:12px;color:#5f6368;word-break:break-all">Servidor configurado en este teléfono:<br><b>' + esc(apiUrl() || '(ninguno)') + '</b></p>';
   abrirModal(
     '<h3>Sincronización con la planilla</h3>' + verInfo + filas +
     '<div class="fila-botones" style="margin-top:10px">' +
