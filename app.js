@@ -5,7 +5,7 @@
 
 // Tiene que ser IGUAL a VERSION en Codigo.gs. Subir los dos juntos cuando
 // se cambia el backend: si no coinciden, la app avisa sola.
-var APP_VERSION = 'v6-sync-2026-09-16';
+var APP_VERSION = 'v7-porpeso-2026-09-16';
 var backendVersion = null; // se completa al conectar con la planilla
 
 var DATA = { nombre_kiosco: 'Kiosco', moneda: '$', vendedores: [], productos: [], clientes: [] };
@@ -356,7 +356,7 @@ function _replayPendientes() {
       if (c3) c3.saldo = round2(c3.saldo - numJS(d.monto));
     } else if (op.accion === 'guardarProducto') {
       var idx = DATA.productos.findIndex(function (x) { return x.codigo === d.codigo; });
-      var obj = { codigo: d.codigo, nombre: d.nombre, precio: numJS(d.precio), stock: numJS(d.stock), categoria: d.categoria || '', activo: d.activo !== false };
+      var obj = { codigo: d.codigo, nombre: d.nombre, precio: numJS(d.precio), stock: numJS(d.stock), categoria: d.categoria || '', activo: d.activo !== false, porPeso: d.porPeso === true };
       if (idx >= 0) DATA.productos[idx] = obj; else DATA.productos.push(obj);
     } else if (op.accion === 'eliminarProducto') {
       DATA.productos = DATA.productos.filter(function (x) { return x.codigo !== d.codigo; });
@@ -651,7 +651,8 @@ function buscarEnVender() {
     var d = document.createElement('div');
     d.className = 'item';
     d.innerHTML = '<div><b>' + esc(p.nombre) + '</b><small>' + esc(p.codigo) +
-      ' · stock ' + p.stock + '</small></div><strong>' + money(p.precio) + '</strong>';
+      ' · ' + (p.porPeso ? 'por peso' : 'stock ' + p.stock) + '</small></div>' +
+      '<strong>' + money(p.precio) + (p.porPeso ? ' /kg' : '') + '</strong>';
     d.addEventListener('click', function () {
       agregarAlCarrito(p);
       $('#buscarProd').value = '';
@@ -675,11 +676,55 @@ function agregarPorCodigo(codigo) {
 }
 
 function agregarAlCarrito(p) {
+  if (p.porPeso) {
+    pedirGramos(p, function (gramos) {
+      var kilos = gramos / 1000;
+      var l = cart.filter(function (x) { return x.codigo === p.codigo; })[0];
+      if (l) { l.cant += kilos; l.gramos = (l.gramos || 0) + gramos; }
+      else cart.push({ codigo: p.codigo, nombre: p.nombre, precio: p.precio, cant: kilos, gramos: gramos, porPeso: true });
+      renderCarrito();
+      toast(p.nombre + ' agregado (' + gramos + ' g)');
+    });
+    return;
+  }
   var l = cart.filter(function (x) { return x.codigo === p.codigo; })[0];
   if (l) l.cant++;
   else cart.push({ codigo: p.codigo, nombre: p.nombre, precio: p.precio, cant: 1 });
   renderCarrito();
   toast(p.nombre + ' agregado');
+}
+
+/** Pide los gramos para un producto que se vende por peso y calcula el precio al toque. */
+/** Código automático para productos por peso (no tienen código de barras real). */
+function proximoCodigoGranel() {
+  var n = 1;
+  while (DATA.productos.some(function (x) { return x.codigo === 'GRANEL-' + n; })) n++;
+  return 'GRANEL-' + n;
+}
+
+function pedirGramos(p, cb) {
+  abrirModal(
+    '<h3>' + esc(p.nombre) + '</h3>' +
+    '<p>Precio por kilo: <b>' + money(p.precio) + '</b></p>' +
+    '<div class="campo"><label>¿Cuántos gramos?</label>' +
+      '<input id="gGramos" type="number" inputmode="numeric" placeholder="Ej: 250" autofocus></div>' +
+    '<div class="vuelto-grande" style="margin:8px 0">Cobrar <b id="gPrecio">' + money(0) + '</b></div>' +
+    '<div class="fila-botones">' +
+      '<button class="btn" id="gCancelar">Cancelar</button>' +
+      '<button class="btn exito" id="gAgregar">Agregar</button>' +
+    '</div>'
+  );
+  $('#gGramos').addEventListener('input', function () {
+    var g = numJS($('#gGramos').value);
+    $('#gPrecio').textContent = money(round2(p.precio * g / 1000));
+  });
+  $('#gCancelar').addEventListener('click', cerrarModal);
+  $('#gAgregar').addEventListener('click', function () {
+    var g = numJS($('#gGramos').value);
+    if (g <= 0) { toast('Poné los gramos.', true); return; }
+    cerrarModal();
+    cb(g);
+  });
 }
 
 function cambiarCant(codigo, delta) {
@@ -720,18 +765,35 @@ function renderCarrito() {
   cart.forEach(function (l) {
     var div = document.createElement('div');
     div.className = 'linea';
-    div.innerHTML =
-      '<div><div class="nom">' + esc(l.nombre) + '</div><div class="pu">' + money(l.precio) + ' c/u</div></div>' +
-      '<div class="sub">' + money(l.precio * l.cant) + '</div>' +
-      '<div class="cant">' +
-        '<button data-a="menos">–</button>' +
-        '<span class="q">' + l.cant + '</span>' +
-        '<button data-a="mas">+</button>' +
-        '<button class="quitar" data-a="quitar">quitar</button>' +
-      '</div>';
-    div.querySelector('[data-a=menos]').addEventListener('click', function () { cambiarCant(l.codigo, -1); });
-    div.querySelector('[data-a=mas]').addEventListener('click', function () { cambiarCant(l.codigo, 1); });
-    div.querySelector('[data-a=quitar]').addEventListener('click', function () { quitarDelCarrito(l.codigo); });
+    if (l.porPeso) {
+      div.innerHTML =
+        '<div><div class="nom">' + esc(l.nombre) + '</div><div class="pu">' + money(l.precio) + ' /kg</div></div>' +
+        '<div class="sub">' + money(l.precio * l.cant) + '</div>' +
+        '<div class="cant">' +
+          '<span class="q">' + l.gramos + ' g</span>' +
+          '<button class="btn chico" data-a="editar">✏️ Editar</button>' +
+          '<button class="quitar" data-a="quitar">quitar</button>' +
+        '</div>';
+      div.querySelector('[data-a=editar]').addEventListener('click', function () {
+        var prod = DATA.productos.find(function (x) { return x.codigo === l.codigo; });
+        quitarDelCarrito(l.codigo);
+        if (prod) agregarAlCarrito(prod);
+      });
+      div.querySelector('[data-a=quitar]').addEventListener('click', function () { quitarDelCarrito(l.codigo); });
+    } else {
+      div.innerHTML =
+        '<div><div class="nom">' + esc(l.nombre) + '</div><div class="pu">' + money(l.precio) + ' c/u</div></div>' +
+        '<div class="sub">' + money(l.precio * l.cant) + '</div>' +
+        '<div class="cant">' +
+          '<button data-a="menos">–</button>' +
+          '<span class="q">' + l.cant + '</span>' +
+          '<button data-a="mas">+</button>' +
+          '<button class="quitar" data-a="quitar">quitar</button>' +
+        '</div>';
+      div.querySelector('[data-a=menos]').addEventListener('click', function () { cambiarCant(l.codigo, -1); });
+      div.querySelector('[data-a=mas]').addEventListener('click', function () { cambiarCant(l.codigo, 1); });
+      div.querySelector('[data-a=quitar]').addEventListener('click', function () { quitarDelCarrito(l.codigo); });
+    }
     cont.appendChild(div);
   });
 
@@ -875,16 +937,18 @@ function formProducto(p) {
   var esNuevo = !p.nombre;
   abrirModal(
     '<h3>' + (esNuevo ? 'Nuevo producto' : 'Editar producto') + '</h3>' +
-    '<div class="campo"><label>Código de barras</label>' +
+    '<div class="campo" id="campoCodigo"><label>Código de barras</label>' +
       '<input id="pCodigo" value="' + esc(p.codigo || '') + '" ' + (esNuevo ? '' : 'readonly') + '>' +
       (esNuevo ? '<div style="display:flex;gap:6px;margin-top:6px">' +
         '<button class="btn chico" id="pEscanear">📷 Escanear</button>' +
         '<button class="btn chico" id="pFoto">🖼️ Foto</button></div>' : '') +
     '</div>' +
     '<div class="campo"><label>Nombre</label><input id="pNombre" value="' + esc(p.nombre || '') + '"></div>' +
-    '<div class="campo"><label>Precio final (con IVA)</label>' +
+    '<div class="campo"><label><input type="checkbox" id="pPorPeso" style="width:auto" ' +
+      (p.porPeso ? 'checked' : '') + '> Se vende por peso (cobra por kilo)</label></div>' +
+    '<div class="campo"><label id="lblPrecio">Precio final (con IVA)</label>' +
       '<input id="pPrecio" type="number" inputmode="decimal" value="' + (p.precio || '') + '"></div>' +
-    '<div class="campo"><label>Stock (unidades)</label>' +
+    '<div class="campo" id="campoStock"><label>Stock (unidades)</label>' +
       '<input id="pStock" type="number" inputmode="numeric" value="' + (p.stock != null ? p.stock : '') + '"></div>' +
     '<div class="campo"><label>Categoría (opcional)</label><input id="pCat" value="' + esc(p.categoria || '') + '"></div>' +
     (esNuevo ? '' : '<div class="campo"><label><input type="checkbox" id="pActivo" style="width:auto" ' +
@@ -895,6 +959,19 @@ function formProducto(p) {
     '</div>' +
     (esNuevo ? '' : '<button class="btn peligro ancho" id="pEliminar" style="margin-top:10px">🗑 Eliminar producto</button>')
   );
+
+  function actualizarModoPeso() {
+    var porPeso = $('#pPorPeso').checked;
+    $('#lblPrecio').textContent = porPeso ? 'Precio por kilo (con IVA)' : 'Precio final (con IVA)';
+    $('#campoStock').classList.toggle('oculto', porPeso);
+    if (esNuevo) {
+      // Por peso no tiene código de barras real: se genera solo, no hace falta escanear.
+      $('#campoCodigo').classList.toggle('oculto', porPeso);
+      if (porPeso) $('#pCodigo').value = proximoCodigoGranel();
+    }
+  }
+  $('#pPorPeso').addEventListener('change', actualizarModoPeso);
+  actualizarModoPeso();
 
   function ponerCodigo(cod) { $('#pCodigo').value = cod; toast('Código: ' + cod); }
   var pel = $('#pEliminar');
@@ -913,13 +990,15 @@ function formProducto(p) {
 
   $('#pCancelar').addEventListener('click', cerrarModal);
   $('#pGuardar').addEventListener('click', function () {
+    var porPeso = $('#pPorPeso').checked;
     var obj = {
       codigo: $('#pCodigo').value.trim(),
       nombre: $('#pNombre').value.trim(),
       precio: parseFloat($('#pPrecio').value) || 0,
-      stock: parseFloat($('#pStock').value) || 0,
+      stock: porPeso ? 0 : (parseFloat($('#pStock').value) || 0),
       categoria: $('#pCat').value.trim(),
-      activo: $('#pActivo') ? $('#pActivo').checked : true
+      activo: $('#pActivo') ? $('#pActivo').checked : true,
+      porPeso: porPeso
     };
     if (!obj.codigo) { toast('Falta el código.', true); return; }
     if (!obj.nombre) { toast('Falta el nombre.', true); return; }

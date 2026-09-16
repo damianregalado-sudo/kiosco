@@ -103,13 +103,14 @@ input, select, textarea {
 .linea .nom { font-weight: 600; }
 .linea .pu { color: var(--gris); font-size: 14px; }
 .linea .sub { font-weight: 700; text-align: right; }
-.linea .cant { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; }
-.linea .cant button {
+.linea .cant { display: flex; align-items: center; gap: 8px; grid-column: 1 / -1; flex-wrap: wrap; }
+.linea .cant button { white-space: nowrap; }
+.linea .cant [data-a="menos"], .linea .cant [data-a="mas"] {
   width: 40px; height: 40px; border-radius: 10px; border: 1px solid var(--borde);
-  background: #fff; font-size: 22px; font-weight: 700; line-height: 1;
+  background: #fff; font-size: 22px; font-weight: 700; line-height: 1; flex: none;
 }
 .linea .cant .q { min-width: 28px; text-align: center; font-weight: 700; }
-.linea .quitar { background: none; border: none; color: var(--rojo); font-size: 14px; }
+.linea .quitar { background: none; border: none; color: var(--rojo); font-size: 14px; padding: 8px 4px; }
 
 .pie-venta {
   position: sticky; bottom: calc(var(--alto-nav) + 6px); z-index: 10;
