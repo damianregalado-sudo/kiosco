@@ -3,6 +3,11 @@
 //  Guardado LOCAL primero + sincronización en segundo plano.
 // ============================================================
 
+// Tiene que ser IGUAL a VERSION en Codigo.gs. Subir los dos juntos cuando
+// se cambia el backend: si no coinciden, la app avisa sola.
+var APP_VERSION = 'v6-sync-2026-09-16';
+var backendVersion = null; // se completa al conectar con la planilla
+
 var DATA = { nombre_kiosco: 'Kiosco', moneda: '$', vendedores: [], productos: [], clientes: [] };
 var cart = [];
 var vendedor = '';
@@ -174,6 +179,11 @@ function programarSync(ms) {
 function actualizarEstadoSync() {
   var el = $('#estadoSync');
   if (!el) return;
+  if (backendVersion && backendVersion !== APP_VERSION) {
+    el.textContent = '⚠ App y planilla en versiones distintas (app ' + APP_VERSION + ' · planilla ' + backendVersion + ') — tocá para ver';
+    el.className = 'sync-linea sync-error';
+    return;
+  }
   var pend = cola();
   if (!pend.length) { el.textContent = '✓ Todo guardado en la planilla'; el.className = 'sync-linea sync-ok'; return; }
   var conError = pend.filter(function (o) { return o.intentos >= 3; }).length;
@@ -266,8 +276,12 @@ function verEstadoSync() {
       (o.intentos >= 3 ? '<button class="mini-btn" data-descartar="' + o.id + '">descartar</button>' : '') +
       '</div>';
   }).join('') || '<p>No hay cambios pendientes: todo está guardado en la planilla.</p>';
+  var verInfo = '<p style="font-size:13px;color:' + (backendVersion && backendVersion !== APP_VERSION ? '#d93025;font-weight:600' : '#5f6368') + '">' +
+    'Versión app: ' + esc(APP_VERSION) + ' · Versión planilla: ' + esc(backendVersion || '(sin datos todavía)') +
+    (backendVersion && backendVersion !== APP_VERSION ? '<br>No coinciden: pegá el Codigo.gs más nuevo en Apps Script e Implementá una Nueva versión.' : '') +
+    '</p>';
   abrirModal(
-    '<h3>Sincronización con la planilla</h3>' + filas +
+    '<h3>Sincronización con la planilla</h3>' + verInfo + filas +
     '<div class="fila-botones" style="margin-top:10px">' +
       '<button class="btn" id="vsCerrar">Cerrar</button>' +
       '<button class="btn primario" id="vsReintentar">Reintentar ahora</button>' +
@@ -412,11 +426,13 @@ window.addEventListener('load', function () {
 
 function aplicarDatos(d) {
   DATA = d;
+  if (d.version) backendVersion = d.version;
   _replayPendientes();
   $('#kioscoNombre').textContent = d.nombre_kiosco;
   llenarVendedores();
   renderProductos();
   renderClientes();
+  actualizarEstadoSync();
 }
 
 function iniciarApp() {
