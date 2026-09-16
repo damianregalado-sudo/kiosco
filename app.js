@@ -5,7 +5,7 @@
 
 // Tiene que ser IGUAL a VERSION en Codigo.gs. Subir los dos juntos cuando
 // se cambia el backend: si no coinciden, la app avisa sola.
-var APP_VERSION = 'v7-porpeso-2026-09-16';
+var APP_VERSION = 'v8-fix-duplicados-2026-09-16';
 var backendVersion = null; // se completa al conectar con la planilla
 
 var DATA = { nombre_kiosco: 'Kiosco', moneda: '$', vendedores: [], productos: [], clientes: [] };
@@ -1053,10 +1053,12 @@ function formCliente(c) {
   );
   $('#cCancelar').addEventListener('click', cerrarModal);
   $('#cGuardar').addEventListener('click', function () {
+    if (this.disabled) return;
     var nombre = $('#cNombre').value.trim();
     var telefono = $('#cTel').value.trim();
     var notas = $('#cNotas').value.trim();
     if (!nombre) { toast('Falta el nombre.', true); return; }
+    this.disabled = true;
 
     if (c.id) {
       var existente = DATA.clientes.find(function (x) { return x.id === c.id; });
