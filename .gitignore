@@ -1,3 +1,8 @@
 .DS_Store
 node_modules/
 *.log
+
+# Backend real (tiene el token de la API) - se gestiona con `clasp push`
+# directo a Apps Script, nunca al repo público.
+apps-script/
+graphify-out/

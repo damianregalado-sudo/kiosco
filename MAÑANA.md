@@ -8,10 +8,10 @@ al Apps Script, trae los productos, registra ventas y anula. Todo OK.
 | Qué | Link |
 |---|---|
 | **App (para los teléfonos)** | https://damianregalado-sudo.github.io/kiosco/ |
-| **Link de configuración** (abrir 1 vez en cada teléfono) | `https://damianregalado-sudo.github.io/kiosco/#api=https://script.google.com/macros/s/AKfycbywe1sRwVka9qmKyIBqjtWiS-amEwlRobkrgF5Rpif8jTN2SZ8w1NOPdu67BHIPjVSr6Q/exec&token=kio_2StaCqxRg8Ifc5LvE9nSxQu` |
+| **Link de configuración** (abrir 1 vez en cada teléfono) | (no lo pongas acá — este archivo es público en GitHub; pedíselo a Damian por otro medio) |
 | Repo (público, sin datos sensibles) | https://github.com/damianregalado-sudo/kiosco |
 | Planilla / Apps Script | tu Google Drive |
-| Clave (token) | `kio_2StaCqxRg8Ifc5LvE9nSxQu` |
+| Clave (token) | (no lo pongas acá — ver arriba) |
 
 ## Poner la app en cada teléfono (3 min)
 
