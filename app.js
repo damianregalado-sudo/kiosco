@@ -279,6 +279,37 @@ function _onSyncOk(item, data) {
   if (item.accion === 'registrarMovimiento') {
     _marcarSincronizado(item.id, null);
   }
+  if (item.accion === 'anularPago' || item.accion === 'anularVenta') {
+    if (data && data.clientes && data.clientes.length) {
+      _reconciliarSaldosClientes(data.clientes);
+    }
+  }
+}
+
+/**
+ * Actualiza DATA.clientes con los saldos confirmados por la planilla,
+ * pero SIN pisar clientes que tienen operaciones todavía pendientes de sync,
+ * para que _replayPendientes() los siga ajustando correctamente.
+ */
+function _reconciliarSaldosClientes(clientesFrescos) {
+  var pendientes = cola();
+  // ids de clientes con operaciones aún en cola (su saldo lo maneja _replayPendientes)
+  var conPendiente = {};
+  pendientes.forEach(function (op) {
+    var d = op.datos || {};
+    if (op.accion === 'registrarVenta' && d.forma_pago === 'cuenta' && d.id_cliente) {
+      conPendiente[d.id_cliente] = true;
+    }
+    if (op.accion === 'registrarPago' && d.id_cliente) {
+      conPendiente[d.id_cliente] = true;
+    }
+  });
+  clientesFrescos.forEach(function (cf) {
+    if (conPendiente[cf.id]) return; // lo maneja _replayPendientes, no tocar
+    var local = DATA.clientes.find(function (x) { return x.id === cf.id; });
+    if (local) local.saldo = numJS(cf.saldo);
+  });
+  renderClientes();
 }
 
 /**
@@ -393,6 +424,10 @@ function _replayPendientes() {
       var idReal2 = mapa.clientes[d.id_cliente] || d.id_cliente;
       var c3 = DATA.clientes.find(function (x) { return x.id === idReal2 || x.id === d.id_cliente; });
       if (c3) c3.saldo = round2(c3.saldo - numJS(d.monto));
+    } else if (op.accion === 'anularPago') {
+      var idReal3 = mapa.clientes[d._cliente_id] || d._cliente_id;
+      var cX = DATA.clientes.find(function (x) { return x.id === idReal3 || x.id === d._cliente_id; });
+      if (cX) cX.saldo = round2(cX.saldo + numJS(d._monto));
     } else if (op.accion === 'guardarProducto') {
       var idx = DATA.productos.findIndex(function (x) { return x.codigo === d.codigo; });
       var obj = { codigo: d.codigo, nombre: d.nombre, precio: numJS(d.precio), stock: numJS(d.stock), categoria: d.categoria || '', activo: d.activo !== false, porPeso: d.porPeso === true };
@@ -1202,7 +1237,7 @@ function verCaja() {
 function renderCajaLocal(fecha) { renderCaja(cajaDesdeLedger(fecha)); }
 
 function cajaDesdeLedger(fecha) {
-  var l = ledgerDia(fecha).filter(function (x) { return !(x.tipo === 'venta' && x.anulada); });
+  var l = ledgerDia(fecha).filter(function (x) { return !x.anulada; });
   var ventas = l.filter(function (x) { return x.tipo === 'venta'; });
   var pagos = l.filter(function (x) { return x.tipo === 'pago'; });
   var movs = l.filter(function (x) { return x.tipo === 'movimiento'; });
@@ -1215,7 +1250,7 @@ function cajaDesdeLedger(fecha) {
   var cobrosCuenta = 0;
   var listaPagos = pagos.map(function (p) {
     cobrosCuenta += p.monto;
-    return { hora: p.hora, cliente: p.cliente, monto: p.monto, vendedor: p.vendedor, _pendiente: !p.synced };
+    return { id_pago: p.id, hora: p.hora, cliente: p.cliente, monto: p.monto, vendedor: p.vendedor, _pendiente: !p.synced };
   });
   var ingresos = 0, egresos = 0;
   var listaMovs = movs.map(function (m) {
@@ -1289,7 +1324,8 @@ function renderCaja(r) {
     html += '<h4>Cobros de cuenta corriente</h4>';
     r.pagos.forEach(function (p) {
       html += '<div class="fila-detalle"><span>' + p.hora + (p._pendiente ? ' ⏳' : '') + ' · ' + esc(p.cliente) + ' · ' + esc(p.vendedor) +
-        '</span><b>' + money(p.monto) + '</b></div>';
+        '</span><span><b>' + money(p.monto) + '</b> ' +
+        '<button class="mini-btn" data-anular-pago="' + esc(p.id_pago) + '">anular</button></span></div>';
     });
   }
   if (r.movimientos.length) {
@@ -1313,6 +1349,20 @@ function renderCaja(r) {
         renderProductos(); renderClientes();
         verCaja();
         toast('Venta anulada');
+      }).catch(function (e) { toast(msg(e), true); });
+    });
+  });
+
+  $all('[data-anular-pago]').forEach(function (b) {
+    b.addEventListener('click', function () {
+      var id = b.dataset.anularPago;
+      if (r.local) { anularPagoLocal(id); return; }
+      if (!confirm('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.')) return;
+      call('anularPago', id).then(function (rr) {
+        DATA.clientes = rr.clientes;
+        renderClientes();
+        verCaja();
+        toast('Cobro anulado');
       }).catch(function (e) { toast(msg(e), true); });
     });
   });
@@ -1350,6 +1400,30 @@ function anularVentaLocal(id) {
   }
   guardarLedgerDia(fecha, l);
   toast('Venta anulada');
+  renderCajaLocal(fecha);
+}
+
+/** Anula un pago de la caja de HOY. Si todavía no había llegado a la
+ *  planilla, alcanza con sacarlo de la cola local. Si ya estaba, se encola
+ *  la anulación real para la planilla. */
+function anularPagoLocal(id) {
+  if (!confirm('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.')) return;
+  var fecha = hoyISO();
+  var l = ledgerDia(fecha);
+  var entry = l.find(function (x) { return x.tipo === 'pago' && x.id === id; });
+  if (!entry || entry.anulada) return;
+
+  var c = DATA.clientes.find(function (x) { return x.nombre === entry.cliente; });
+  if (c) { c.saldo = round2(c.saldo + entry.monto); renderClientes(); }
+
+  entry.anulada = true;
+  if (!entry.synced) {
+    guardarCola(cola().filter(function (o) { return o.id !== entry.opId; }));
+  } else {
+    encolar('anularPago', { id_pago: entry.id, _cliente_id: c ? c.id : null, _monto: entry.monto });
+  }
+  guardarLedgerDia(fecha, l);
+  toast('Cobro anulado');
   renderCajaLocal(fecha);
 }
 
