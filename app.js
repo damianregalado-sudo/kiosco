@@ -5,7 +5,7 @@
 
 // Tiene que ser IGUAL a VERSION en Codigo.gs. Subir los dos juntos cuando
 // se cambia el backend: si no coinciden, la app avisa sola.
-var APP_VERSION = 'v9-token-rotado-2026-09-18';
+var APP_VERSION = 'v10-fix-ventas-duplicadas-2026-09-21';
 var backendVersion = null; // se completa al conectar con la planilla
 
 var DATA = { nombre_kiosco: 'Kiosco', moneda: '$', vendedores: [], productos: [], clientes: [] };
@@ -852,9 +852,11 @@ function abrirCobro() {
 
   $('#btnCancelarCobro').addEventListener('click', cerrarModal);
   $('#btnConfirmarCobro').addEventListener('click', function () {
+    if (this.disabled) return; // guard anti-doble-tap
     var itemsVenta = cart.map(function (l) { return { codigo: l.codigo, cantidad: l.cant }; });
     var idCliente = formaSel === 'cuenta' ? $('#selCliente').value : '';
     if (formaSel === 'cuenta' && !idCliente) { toast('Elegí el cliente.', true); return; }
+    this.disabled = true; // bloquear hasta que el modal se cierre
 
     var calc = calcularVenta(itemsVenta);
     var totalReal = calc.total;
@@ -877,7 +879,8 @@ function abrirCobro() {
     var idLocalVenta = proximoIdLocal('V');
     var opId = encolar('registrarVenta', {
       vendedor: vendedor, forma_pago: formaSel, paga_con: pagaCon,
-      id_cliente: idCliente, items: itemsVenta, _totalEstimado: totalReal
+      id_cliente: idCliente, items: itemsVenta, _totalEstimado: totalReal,
+      idLocal: idLocalVenta
     });
     agregarLedger({
       tipo: 'venta', id: idLocalVenta, hora: horaAhora(), vendedor: vendedor, total: totalReal,
