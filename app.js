@@ -262,10 +262,49 @@ function _onSyncOk(item, data) {
   }
   if (item.accion === 'registrarVenta' && data && data.id_venta) {
     _marcarSincronizado(item.id, data.id_venta);
+    // Si la venta era a cuenta, el backend devuelve los saldos reales;
+    // los aplicamos para que el saldo local quede igual al de la planilla.
+    if (data.clientes && data.clientes.length) {
+      _reconciliarSaldosClientes(data.clientes);
+    }
   }
-  if (item.accion === 'registrarPago' || item.accion === 'registrarMovimiento') {
+  if (item.accion === 'registrarPago') {
+    _marcarSincronizado(item.id, null);
+    // El backend devuelve los saldos reales tras el pago; los aplicamos
+    // para evitar que un reload posterior muestre saldo desactualizado.
+    if (data && data.clientes && data.clientes.length) {
+      _reconciliarSaldosClientes(data.clientes);
+    }
+  }
+  if (item.accion === 'registrarMovimiento') {
     _marcarSincronizado(item.id, null);
   }
+}
+
+/**
+ * Actualiza DATA.clientes con los saldos confirmados por la planilla,
+ * pero SIN pisar clientes que tienen operaciones todavía pendientes de sync,
+ * para que _replayPendientes() los siga ajustando correctamente.
+ */
+function _reconciliarSaldosClientes(clientesFrescos) {
+  var pendientes = cola();
+  // ids de clientes con operaciones aún en cola (su saldo lo maneja _replayPendientes)
+  var conPendiente = {};
+  pendientes.forEach(function (op) {
+    var d = op.datos || {};
+    if (op.accion === 'registrarVenta' && d.forma_pago === 'cuenta' && d.id_cliente) {
+      conPendiente[d.id_cliente] = true;
+    }
+    if (op.accion === 'registrarPago' && d.id_cliente) {
+      conPendiente[d.id_cliente] = true;
+    }
+  });
+  clientesFrescos.forEach(function (cf) {
+    if (conPendiente[cf.id]) return; // lo maneja _replayPendientes, no tocar
+    var local = DATA.clientes.find(function (x) { return x.id === cf.id; });
+    if (local) local.saldo = numJS(cf.saldo);
+  });
+  renderClientes();
 }
 
 function verEstadoSync() {
