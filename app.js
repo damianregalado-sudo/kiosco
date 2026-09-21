@@ -993,6 +993,7 @@ function formProducto(p) {
 
   $('#pCancelar').addEventListener('click', cerrarModal);
   $('#pGuardar').addEventListener('click', function () {
+    if (this.disabled) return;
     var porPeso = $('#pPorPeso').checked;
     var obj = {
       codigo: $('#pCodigo').value.trim(),
@@ -1005,6 +1006,8 @@ function formProducto(p) {
     };
     if (!obj.codigo) { toast('Falta el código.', true); return; }
     if (!obj.nombre) { toast('Falta el nombre.', true); return; }
+
+    this.disabled = true;
 
     var idx = DATA.productos.findIndex(function (x) { return x.codigo === obj.codigo; });
     if (idx >= 0) DATA.productos[idx] = obj; else DATA.productos.push(obj);
@@ -1095,13 +1098,17 @@ function formPago(c) {
   $('#mTodo').addEventListener('click', function () { $('#mMonto').value = c.saldo; });
   $('#mCancelar').addEventListener('click', cerrarModal);
   $('#mGuardar').addEventListener('click', function () {
+    if (this.disabled) return;
     var monto = parseFloat($('#mMonto').value) || 0;
     if (monto <= 0) { toast('Poné un monto.', true); return; }
 
+    this.disabled = true;
+
     c.saldo = round2(c.saldo - monto);
     renderClientes();
-    var opId = encolar('registrarPago', { id_cliente: c.id, monto: monto, vendedor: vendedor });
-    agregarLedger({ tipo: 'pago', id: proximoIdLocal('P'), hora: horaAhora(), cliente: c.nombre, monto: monto, vendedor: vendedor, synced: false, opId: opId });
+    var idLocalPago = proximoIdLocal('P');
+    var opId = encolar('registrarPago', { id_cliente: c.id, monto: monto, vendedor: vendedor, idLocal: idLocalPago });
+    agregarLedger({ tipo: 'pago', id: idLocalPago, hora: horaAhora(), cliente: c.nombre, monto: monto, vendedor: vendedor, synced: false, opId: opId });
 
     cerrarModal();
     toast('Pago registrado');
@@ -1324,12 +1331,16 @@ function formMovimiento(tipo) {
   );
   $('#moCancelar').addEventListener('click', cerrarModal);
   $('#moGuardar').addEventListener('click', function () {
+    if (this.disabled) return;
     var monto = parseFloat($('#moMonto').value) || 0;
     if (monto <= 0) { toast('Poné un monto.', true); return; }
     var concepto = $('#moConcepto').value.trim();
 
-    var opId = encolar('registrarMovimiento', { tipo: tipo, concepto: concepto, monto: monto, vendedor: vendedor });
-    agregarLedger({ tipo: 'movimiento', id: proximoIdLocal('M'), hora: horaAhora(), tipoMov: tipo, concepto: concepto, monto: monto, vendedor: vendedor, synced: false, opId: opId });
+    this.disabled = true;
+
+    var idLocalMov = proximoIdLocal('M');
+    var opId = encolar('registrarMovimiento', { tipo: tipo, concepto: concepto, monto: monto, vendedor: vendedor, idLocal: idLocalMov });
+    agregarLedger({ tipo: 'movimiento', id: idLocalMov, hora: horaAhora(), tipoMov: tipo, concepto: concepto, monto: monto, vendedor: vendedor, synced: false, opId: opId });
 
     cerrarModal();
     toast('Registrado');
