@@ -5,7 +5,7 @@
 
 // Tiene que ser IGUAL a VERSION en Codigo.gs. Subir los dos juntos cuando
 // se cambia el backend: si no coinciden, la app avisa sola.
-var APP_VERSION = 'v11-fix-anular-pago-2026-09-21';
+var APP_VERSION = 'v12-robustez-logs-2026-09-23';
 var backendVersion = null; // se completa al conectar con la planilla
 
 var DATA = { nombre_kiosco: 'Kiosco', moneda: '$', vendedores: [], productos: [], clientes: [] };
@@ -72,6 +72,50 @@ function esIdLocal(id) { return /-L\d+$/.test(String(id || '')); }
 function cajaActiva() { var s = $('#scr-caja'); return !!(s && s.classList.contains('activa')); }
 
 // ============================================================
+//  LOG LOCAL — registra acciones para diagnóstico
+// ============================================================
+function LOG(tipo, detalle) {
+  try {
+    var log = _leerJSON('kiosco_log', []);
+    log.push({ ts: new Date().toISOString(), tipo: tipo, detalle: detalle || {} });
+    if (log.length > 5000) log = log.slice(log.length - 5000);
+    _guardarJSON('kiosco_log', log);
+  } catch (e) { /* localStorage lleno o no disponible — no crashear la app */ }
+}
+
+function exportarLog() {
+  var log = _leerJSON('kiosco_log', []);
+  var lineas = [];
+  lineas.push('=== Log de diagnostico - Kiosco ===');
+  lineas.push('Fecha de exportacion: ' + new Date().toISOString());
+  lineas.push('Version app: ' + APP_VERSION);
+  lineas.push('Servidor: ' + (apiUrl() || '(no configurado)'));
+  lineas.push('Vendedor actual: ' + (vendedor || '(ninguno)'));
+  lineas.push('Entradas: ' + log.length);
+  lineas.push('========================================');
+  lineas.push('');
+  log.forEach(function (e) {
+    var det = (typeof e.detalle === 'object' && e.detalle !== null) ? JSON.stringify(e.detalle) : String(e.detalle || '');
+    lineas.push(e.ts + '  [' + e.tipo + ']  ' + det);
+  });
+  var texto = lineas.join('\n');
+  try {
+    var blob = new Blob([texto], { type: 'text/plain;charset=utf-8' });
+    var url = URL.createObjectURL(blob);
+    var a = document.createElement('a');
+    a.href = url;
+    a.download = 'kiosco_log_' + hoyISO() + '.txt';
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    toast('Log exportado');
+  } catch (e) {
+    toast('No se pudo exportar el log: ' + msg(e), true);
+  }
+}
+
+// ============================================================
 //  CONEXIÓN CON EL SERVIDOR (Apps Script)
 // ============================================================
 function _cfg(clave, valorConfig) {
@@ -112,6 +156,8 @@ function api(action, data, metodo) {
       return j.data;
     })
     .catch(function (e) {
+      var errMsg = (e instanceof TypeError) ? 'No hay conexión con el servidor. Revisá internet o la dirección configurada.' : msg(e);
+      LOG('error_api', { action: action, error: errMsg });
       if (e instanceof TypeError) throw new Error('No hay conexión con el servidor. Revisá internet o la dirección configurada.');
       throw e;
     });
@@ -207,6 +253,7 @@ function sincronizarAhora() {
 
   syncEnCurso = true;
   actualizarEstadoSync();
+  LOG('sync_inicio', { pendientes: pend.length });
 
   var mapa = mapaIds();
   var lote = pend.map(function (o) {
@@ -239,10 +286,12 @@ function sincronizarAhora() {
     }
     guardarCola(actuales);
     syncEnCurso = false;
+    LOG('sync_ok', { procesadas: (r.resultados || []).length, errores: huboError, pendientes: actuales.length });
     actualizarEstadoSync();
     programarSync(huboError ? SYNC_ERROR : SYNC_NORMAL);
-  }).catch(function () {
+  }).catch(function (e) {
     syncEnCurso = false;
+    LOG('sync_error', { error: msg(e) });
     actualizarEstadoSync();
     programarSync(SYNC_ERROR);
   });
@@ -284,32 +333,6 @@ function _onSyncOk(item, data) {
       _reconciliarSaldosClientes(data.clientes);
     }
   }
-}
-
-/**
- * Actualiza DATA.clientes con los saldos confirmados por la planilla,
- * pero SIN pisar clientes que tienen operaciones todavía pendientes de sync,
- * para que _replayPendientes() los siga ajustando correctamente.
- */
-function _reconciliarSaldosClientes(clientesFrescos) {
-  var pendientes = cola();
-  // ids de clientes con operaciones aún en cola (su saldo lo maneja _replayPendientes)
-  var conPendiente = {};
-  pendientes.forEach(function (op) {
-    var d = op.datos || {};
-    if (op.accion === 'registrarVenta' && d.forma_pago === 'cuenta' && d.id_cliente) {
-      conPendiente[d.id_cliente] = true;
-    }
-    if (op.accion === 'registrarPago' && d.id_cliente) {
-      conPendiente[d.id_cliente] = true;
-    }
-  });
-  clientesFrescos.forEach(function (cf) {
-    if (conPendiente[cf.id]) return; // lo maneja _replayPendientes, no tocar
-    var local = DATA.clientes.find(function (x) { return x.id === cf.id; });
-    if (local) local.saldo = numJS(cf.saldo);
-  });
-  renderClientes();
 }
 
 /**
@@ -522,11 +545,15 @@ function iniciarApp() {
   } catch (e) {}
   if (!hayCache) $('#listaProductos').innerHTML = '<p style="color:#5f6368">Cargando productos…</p>';
 
+  LOG('app_inicio', { version: APP_VERSION, cache: hayCache });
+
   call('getBootstrap').then(function (d) {
     aplicarDatos(d);
+    LOG('bootstrap_ok', { productos: d.productos ? d.productos.length : 0, clientes: d.clientes ? d.clientes.length : 0, versionBackend: d.version });
     verCaja();
     try { localStorage.setItem('kiosco_cache', JSON.stringify(d)); } catch (e) {}
   }).catch(function (e) {
+    LOG('bootstrap_error', { error: msg(e), cache: hayCache });
     toast(hayCache ? 'Sin conexión: mostrando datos guardados.' : ('No se pudo conectar: ' + msg(e)), true);
     verCaja();
   });
@@ -571,6 +598,7 @@ function iniciarApp() {
       location.reload();
     }
   });
+  $('#btnExportLog').addEventListener('click', exportarLog);
 
   $('#overlay').addEventListener('click', function (e) { if (e.target.id === 'overlay') cerrarModal(); });
 }
@@ -962,6 +990,8 @@ function abrirCobro() {
       items: itemsVenta, anulada: false, synced: false, opId: opId
     });
 
+    LOG('venta', { id: idLocalVenta, items: itemsVenta.map(function(it) { return it.codigo; }), total: totalReal, forma_pago: formaSel, clienteId: idCliente, vendedor: vendedor });
+
     // 3) Mostrar el resultado YA, sin esperar a la planilla
     cart = [];
     renderCarrito();
@@ -1057,6 +1087,7 @@ function formProducto(p) {
     DATA.productos = DATA.productos.filter(function (x) { return x.codigo !== p.codigo; });
     renderProductos();
     encolar('eliminarProducto', { codigo: p.codigo });
+    LOG('producto_eliminado', { codigo: p.codigo, nombre: p.nombre });
     cerrarModal();
     toast('Producto eliminado');
   });
@@ -1084,9 +1115,11 @@ function formProducto(p) {
     this.disabled = true;
 
     var idx = DATA.productos.findIndex(function (x) { return x.codigo === obj.codigo; });
-    if (idx >= 0) DATA.productos[idx] = obj; else DATA.productos.push(obj);
+    var esEdicion = idx >= 0;
+    if (esEdicion) DATA.productos[idx] = obj; else DATA.productos.push(obj);
     renderProductos();
     encolar('guardarProducto', obj);
+    LOG(esEdicion ? 'producto_editado' : 'producto_creado', { codigo: obj.codigo, nombre: obj.nombre, precio: obj.precio, porPeso: obj.porPeso });
     cerrarModal();
     toast('Producto guardado');
   });
@@ -1145,12 +1178,14 @@ function formCliente(c) {
       if (existente) { existente.nombre = nombre; existente.telefono = telefono; existente.notas = notas; }
       renderClientes();
       encolar('guardarCliente', { id: c.id, nombre: nombre, telefono: telefono, notas: notas, saldo: c.saldo });
+      LOG('cliente_editado', { id: c.id, nombre: nombre });
     } else {
       var saldoInicial = parseFloat($('#cSaldo').value) || 0;
       var tempId = proximoIdLocal('C');
       DATA.clientes.push({ id: tempId, nombre: nombre, telefono: telefono, saldo: saldoInicial, notas: notas });
       renderClientes();
       encolar('guardarCliente', { id: '', idLocal: tempId, nombre: nombre, telefono: telefono, notas: notas, saldo: saldoInicial });
+      LOG('cliente_creado', { idLocal: tempId, nombre: nombre, saldo: saldoInicial });
     }
     cerrarModal();
     toast('Cliente guardado');
@@ -1182,7 +1217,8 @@ function formPago(c) {
     renderClientes();
     var idLocalPago = proximoIdLocal('P');
     var opId = encolar('registrarPago', { id_cliente: c.id, monto: monto, vendedor: vendedor, idLocal: idLocalPago });
-    agregarLedger({ tipo: 'pago', id: idLocalPago, hora: horaAhora(), cliente: c.nombre, monto: monto, vendedor: vendedor, synced: false, opId: opId });
+    agregarLedger({ tipo: 'pago', id: idLocalPago, hora: horaAhora(), cliente: c.nombre, clienteId: c.id, monto: monto, vendedor: vendedor, synced: false, opId: opId });
+    LOG('pago', { id: idLocalPago, clienteId: c.id, cliente: c.nombre, monto: monto, vendedor: vendedor });
 
     cerrarModal();
     toast('Pago registrado');
@@ -1399,6 +1435,7 @@ function anularVentaLocal(id) {
     });
   }
   guardarLedgerDia(fecha, l);
+  LOG('anular_venta', { id: id, total: entry.total, forma_pago: entry.forma_pago, clienteId: entry.clienteId });
   toast('Venta anulada');
   renderCajaLocal(fecha);
 }
@@ -1413,7 +1450,9 @@ function anularPagoLocal(id) {
   var entry = l.find(function (x) { return x.tipo === 'pago' && x.id === id; });
   if (!entry || entry.anulada) return;
 
-  var c = DATA.clientes.find(function (x) { return x.nombre === entry.cliente; });
+  var c = entry.clienteId
+    ? DATA.clientes.find(function (x) { return x.id === entry.clienteId; })
+    : DATA.clientes.find(function (x) { return x.nombre === entry.cliente; });
   if (c) { c.saldo = round2(c.saldo + entry.monto); renderClientes(); }
 
   entry.anulada = true;
@@ -1423,6 +1462,7 @@ function anularPagoLocal(id) {
     encolar('anularPago', { id_pago: entry.id, _cliente_id: c ? c.id : null, _monto: entry.monto });
   }
   guardarLedgerDia(fecha, l);
+  LOG('anular_pago', { id: id, clienteId: c ? c.id : null, monto: entry.monto });
   toast('Cobro anulado');
   renderCajaLocal(fecha);
 }
@@ -1454,6 +1494,7 @@ function formMovimiento(tipo) {
     var idLocalMov = proximoIdLocal('M');
     var opId = encolar('registrarMovimiento', { tipo: tipo, concepto: concepto, monto: monto, vendedor: vendedor, idLocal: idLocalMov });
     agregarLedger({ tipo: 'movimiento', id: idLocalMov, hora: horaAhora(), tipoMov: tipo, concepto: concepto, monto: monto, vendedor: vendedor, synced: false, opId: opId });
+    LOG('movimiento', { id: idLocalMov, tipo: tipo, concepto: concepto, monto: monto, vendedor: vendedor });
 
     cerrarModal();
     toast('Registrado');
