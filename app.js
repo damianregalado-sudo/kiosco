@@ -393,6 +393,37 @@ function verEstadoSync() {
   });
 }
 
+// ---------- RESET de datos (conserva productos) ----------
+function resetDatos() {
+  if (!confirm('Se van a borrar TODOS los clientes, ventas, pagos y movimientos de la planilla.\nLos productos se mantienen.\n\n¿Estás seguro/a?')) return;
+  if (!confirm('ULTIMA OPORTUNIDAD: esto NO se puede deshacer.\n¿Continuar con el reset?')) return;
+
+  toast('Reseteando datos en la planilla…');
+  api('resetDatos', {}, 'POST').then(function () {
+    // Limpiar todo el localStorage de la app excepto conexión
+    var urlGuardada = apiUrl();
+    var tokenGuardado = apiToken();
+    var keys = [];
+    try {
+      for (var i = 0; i < localStorage.length; i++) {
+        var k = localStorage.key(i);
+        if (k && k.indexOf('kiosco_') === 0) keys.push(k);
+      }
+      keys.push('vendedor');
+      keys.forEach(function (k) { localStorage.removeItem(k); });
+    } catch (e) {}
+    // Restaurar conexión
+    try {
+      if (urlGuardada) localStorage.setItem('kiosco_api_url', urlGuardada);
+      if (tokenGuardado) localStorage.setItem('kiosco_token', tokenGuardado);
+    } catch (e) {}
+    toast('Reset completo. Recargando…');
+    setTimeout(function () { location.reload(); }, 1200);
+  }).catch(function (e) {
+    toast('Error al resetear: ' + msg(e), true);
+  });
+}
+
 // ---------- Caja de HOY: guardada en este teléfono ----------
 function claveLedger(fecha) { return 'kiosco_hoy_' + fecha; }
 function ledgerDia(fecha) { return _leerJSON(claveLedger(fecha), []); }
@@ -599,6 +630,14 @@ function iniciarApp() {
     }
   });
   $('#btnExportLog').addEventListener('click', exportarLog);
+
+  // Botón de reset (se inserta dinámicamente después del btnConfig)
+  var btnReset = document.createElement('button');
+  btnReset.className = 'btn texto';
+  btnReset.style.color = '#d93025';
+  btnReset.textContent = '⚠️ Resetear datos (borrar ventas, clientes, pagos)';
+  $('#btnConfig').parentNode.appendChild(btnReset);
+  btnReset.addEventListener('click', resetDatos);
 
   $('#overlay').addEventListener('click', function (e) { if (e.target.id === 'overlay') cerrarModal(); });
 }
