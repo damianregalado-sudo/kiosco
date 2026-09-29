@@ -319,9 +319,12 @@ function _onSyncOk(item, data) {
   }
   if (item.accion === 'registrarPago') {
     _marcarSincronizado(item.id, null);
-    // El backend devuelve los saldos reales tras el pago; los aplicamos
-    // para evitar que un reload posterior muestre saldo desactualizado.
-    if (data && data.clientes && data.clientes.length) {
+    if (data && data.clienteEliminado) {
+      var idPagado = (item.datos && item.datos.id_cliente) || '';
+      DATA.clientes = DATA.clientes.filter(function (x) { return x.id !== idPagado; });
+      renderClientes();
+      toast('Cliente eliminado (deuda saldada)');
+    } else if (data && data.clientes && data.clientes.length) {
       _reconciliarSaldosClientes(data.clientes);
     }
   }
@@ -495,6 +498,13 @@ function _replayPendientes() {
     } else if (op.accion === 'guardarCliente' && d.id) {
       var c4 = DATA.clientes.find(function (x) { return x.id === d.id; });
       if (c4) { c4.nombre = d.nombre; c4.telefono = d.telefono || ''; c4.notas = d.notas || ''; }
+    } else if (op.accion === 'eliminarCliente') {
+      var idElim = d.id_cliente || d.idCliente;
+      DATA.clientes = DATA.clientes.filter(function (x) { return x.id !== idElim; });
+    } else if (op.accion === 'desactivarCliente') {
+      var idDesact = d.id_cliente || d.idCliente;
+      var cDesact = DATA.clientes.find(function (x) { return x.id === idDesact; });
+      if (cDesact) cDesact.activo = false;
     }
   });
 }
@@ -951,7 +961,9 @@ function abrirCobro() {
   var total = totalCarrito();
   var formaSel = 'efectivo';
 
-  var clientesOpts = DATA.clientes.map(function (c) {
+  var clientesOpts = DATA.clientes.filter(function (c) {
+    return c.activo !== false;
+  }).map(function (c) {
     return '<option value="' + esc(c.id) + '">' + esc(c.nombre) + (c.saldo > 0 ? ' (debe ' + money(c.saldo) + ')' : '') + '</option>';
   }).join('');
 
@@ -1172,17 +1184,20 @@ function renderClientes() {
   cont.innerHTML = '';
   DATA.clientes.slice().sort(function (a, b) { return a.nombre.localeCompare(b.nombre); }).forEach(function (c) {
     var div = document.createElement('div');
-    div.className = 'tarjeta';
+    var inactivo = c.activo === false;
+    div.className = 'tarjeta' + (inactivo ? ' tarjeta-inactiva' : '');
     var clase = c.saldo > 0 ? 'saldo-pos' : 'saldo-cero';
     var txt = c.saldo > 0 ? 'Debe ' + money(c.saldo) : 'Al día';
+    var etiqueta = inactivo ? ' [INACTIVO]' : '';
     div.innerHTML =
-      '<div class="info"><b>' + esc(c.nombre) + (esIdLocal(c.id) ? ' ⏳' : '') + '</b><small>' + esc(c.telefono || '') + '</small>' +
+      '<div class="info"><b' + (inactivo ? ' style="color:#9aa0a6"' : '') + '>' + esc(c.nombre) + etiqueta + (esIdLocal(c.id) ? ' ⏳' : '') + '</b><small>' + esc(c.telefono || '') + '</small>' +
       '<div class="' + clase + '">' + txt + '</div></div>' +
       '<div style="display:flex;flex-direction:column;gap:6px">' +
-        '<button class="btn chico primario" data-a="pago">Registrar pago</button>' +
+        (c.saldo > 0 ? '<button class="btn chico primario" data-a="pago">Registrar pago</button>' : '') +
         '<button class="btn chico" data-a="ver">Ver cuenta</button>' +
       '</div>';
-    div.querySelector('[data-a=pago]').addEventListener('click', function () { formPago(c); });
+    var btnPago = div.querySelector('[data-a=pago]');
+    if (btnPago) btnPago.addEventListener('click', function () { formPago(c); });
     div.querySelector('[data-a=ver]').addEventListener('click', function () { verCuenta(c); });
     cont.appendChild(div);
   });
@@ -1253,16 +1268,39 @@ function formPago(c) {
     this.disabled = true;
 
     c.saldo = round2(c.saldo - monto);
-    renderClientes();
     var idLocalPago = proximoIdLocal('P');
     var opId = encolar('registrarPago', { id_cliente: c.id, monto: monto, vendedor: vendedor, idLocal: idLocalPago });
     agregarLedger({ tipo: 'pago', id: idLocalPago, hora: horaAhora(), cliente: c.nombre, clienteId: c.id, monto: monto, vendedor: vendedor, synced: false, opId: opId });
     LOG('pago', { id: idLocalPago, clienteId: c.id, cliente: c.nombre, monto: monto, vendedor: vendedor });
 
+    if (c.activo === false && c.saldo <= 0) {
+      DATA.clientes = DATA.clientes.filter(function (x) { return x.id !== c.id; });
+      toast('Pago registrado. Cliente eliminado (deuda saldada)');
+    } else {
+      toast('Pago registrado');
+    }
+    renderClientes();
     cerrarModal();
-    toast('Pago registrado');
     if (cajaActiva()) verCaja();
   });
+}
+
+function _eliminarClienteLocal(c) {
+  DATA.clientes = DATA.clientes.filter(function (x) { return x.id !== c.id; });
+  renderClientes();
+  encolar('eliminarCliente', { id_cliente: c.id });
+  LOG('cliente_eliminado', { id: c.id, nombre: c.nombre });
+  cerrarModal();
+  toast('Cliente eliminado');
+}
+
+function _desactivarClienteLocal(c) {
+  c.activo = false;
+  renderClientes();
+  encolar('desactivarCliente', { id_cliente: c.id });
+  LOG('cliente_desactivado', { id: c.id, nombre: c.nombre });
+  cerrarModal();
+  toast('Cliente desactivado');
 }
 
 function verCuenta(c) {
@@ -1284,16 +1322,35 @@ function verCuenta(c) {
       return '<div class="fila-detalle"><span>' + m.fecha + ' ' + m.hora + ' · ' + esc(m.detalle) +
         '</span><b style="' + color + '">' + val + '</b></div>';
     }).join('') || '<p>Sin movimientos.</p>';
+    var inactivo = c.activo === false;
+    var saldoReal = numJS(r.cliente.saldo);
+    var btnElimDes = '';
+    if (saldoReal <= 0) {
+      btnElimDes = '<button class="btn peligro ancho" id="vcEliminar" style="margin-top:10px">Eliminar cliente</button>';
+    } else if (!inactivo) {
+      btnElimDes = '<button class="btn ancho" id="vcDesactivar" style="margin-top:10px;color:#d93025;border-color:#d93025">Desactivar cliente</button>';
+    }
     $('#modal').innerHTML =
-      '<h3>Cuenta de ' + esc(r.cliente.nombre) + '</h3>' +
+      '<h3>Cuenta de ' + esc(r.cliente.nombre) + (inactivo ? ' [INACTIVO]' : '') + '</h3>' +
       '<p style="font-size:20px">Saldo: <b class="' + (r.cliente.saldo > 0 ? 'saldo-pos' : 'saldo-cero') + '">' + money(r.cliente.saldo) + '</b></p>' +
       filas +
       '<div class="fila-botones" style="margin-top:12px">' +
         '<button class="btn" id="vcCerrar">Cerrar</button>' +
         '<button class="btn" id="vcEditar">Editar datos</button>' +
-      '</div>';
+      '</div>' +
+      btnElimDes;
     $('#vcCerrar').addEventListener('click', cerrarModal);
     $('#vcEditar').addEventListener('click', function () { formCliente(c); });
+    var btnElim = $('#vcEliminar');
+    if (btnElim) btnElim.addEventListener('click', function () {
+      if (!confirm('¿Eliminar a ' + c.nombre + '? Esta acción no se puede deshacer.')) return;
+      _eliminarClienteLocal(c);
+    });
+    var btnDesact = $('#vcDesactivar');
+    if (btnDesact) btnDesact.addEventListener('click', function () {
+      if (!confirm(c.nombre + ' tiene deuda (' + money(c.saldo) + '). No se puede eliminar.\n\nSe va a desactivar: no va a aparecer para ventas nuevas a cuenta, pero sigue en la lista para cobrarle la deuda.\n\nCuando pague toda la deuda, se elimina solo.\n\n¿Desactivar?')) return;
+      _desactivarClienteLocal(c);
+    });
   }).catch(function (e) { toast(msg(e), true); });
 }
 
