@@ -5,7 +5,7 @@
 
 // Tiene que ser IGUAL a VERSION en Codigo.gs. Subir los dos juntos cuando
 // se cambia el backend: si no coinciden, la app avisa sola.
-var APP_VERSION = 'v13-historial-ventas-2026-10-26';
+var APP_VERSION = 'v14-anular-desde-cuenta-2026-10-26';
 var backendVersion = null; // se completa al conectar con la planilla
 
 var DATA = { nombre_kiosco: 'Kiosco', moneda: '$', vendedores: [], productos: [], clientes: [] };
@@ -1332,11 +1332,12 @@ function verCuenta(c) {
   }
   abrirModal('<h3>Cuenta de ' + esc(c.nombre) + '</h3><p>Cargando…</p>');
   call('getCuentaCliente', c.id).then(function (r) {
-    var filas = r.movimientos.map(function (m) {
+    var filas = r.movimientos.map(function (m, i) {
       var val = m.debe ? '+' + money(m.debe) : '-' + money(m.haber);
       var color = m.debe ? 'color:#d93025' : 'color:#1e8e3e';
-      return '<div class="fila-detalle"><span>' + m.fecha + ' ' + m.hora + ' · ' + esc(m.detalle) +
-        '</span><b style="' + color + '">' + val + '</b></div>';
+      var btn = m.id ? ' <button class="mini-btn" data-anular-mov="' + i + '">anular</button>' : '';
+      return '<div class="fila-detalle" data-mov="' + i + '"><span>' + esc(m.fecha) + ' ' + esc(m.hora) + ' · ' + esc(m.detalle) +
+        '</span><span><b style="' + color + '">' + val + '</b>' + btn + '</span></div>';
     }).join('') || '<p>Sin movimientos.</p>';
     var inactivo = c.activo === false;
     var saldoReal = numJS(r.cliente.saldo);
@@ -1357,6 +1358,9 @@ function verCuenta(c) {
       btnElimDes;
     $('#vcCerrar').addEventListener('click', cerrarModal);
     $('#vcEditar').addEventListener('click', function () { formCliente(c); });
+    $all('[data-anular-mov]').forEach(function (b) {
+      b.addEventListener('click', function () { anularDesdeCuenta(c, r.movimientos[+b.dataset.anularMov], b); });
+    });
     var btnElim = $('#vcEliminar');
     if (btnElim) btnElim.addEventListener('click', function () {
       confirmar('¿Eliminar a ' + c.nombre + '? Esta acción no se puede deshacer.', { si: 'Eliminar', peligro: true }).then(function (ok) {
@@ -1370,6 +1374,45 @@ function verCuenta(c) {
       });
     });
   }).catch(function (e) { toast(msg(e), true); });
+}
+
+/** Anula una compra o un cobro desde la cuenta corriente del cliente.
+ *  Si es de hoy y está en el registro de este teléfono, se anula por el
+ *  mismo camino que la Caja de hoy (así la caja del día también lo descuenta);
+ *  si no, se le pide directo a la planilla, igual que la Caja de otro día. */
+function anularDesdeCuenta(c, m, boton) {
+  var esVenta = m.tipo === 'venta';
+  var hoy = hoyISO();
+  var entry = m.fecha === hoy && ledgerDia(hoy).find(function (x) {
+    return x.tipo === m.tipo && (x.id === m.id || (m.idLocal && x.id === m.idLocal));
+  });
+  if (entry && entry.anulada) { toast('Ya está anulado'); return; }
+  if (entry) {
+    (esVenta ? anularVentaLocal : anularPagoLocal)(entry.id).then(function (ok) {
+      if (!ok) return;
+      var fila = boton.closest('.fila-detalle');
+      if (fila) { fila.style.textDecoration = 'line-through'; fila.style.opacity = '0.5'; boton.remove(); }
+    });
+    return;
+  }
+  var texto = esVenta
+    ? '¿Anular la compra ' + m.id + ' de ' + money(m.debe) + '? Se repone el stock y se le descuenta de la deuda.'
+    : '¿Anular el cobro ' + m.id + ' de ' + money(m.haber) + '? Se le vuelve a cargar la deuda al cliente.';
+  confirmar(texto, { si: 'Anular', peligro: true }).then(function (ok) {
+    if (!ok) return;
+    LOG(esVenta ? 'anular_venta_planilla' : 'anular_pago_planilla', { id: m.id, desde: 'cuenta' });
+    boton.disabled = true; boton.textContent = '…';
+    call(esVenta ? 'anularVenta' : 'anularPago', m.id).then(function (rr) {
+      if (rr.productos) DATA.productos = rr.productos;
+      if (rr.clientes) DATA.clientes = rr.clientes;
+      renderProductos(); renderClientes();
+      toast(esVenta ? 'Compra anulada' : 'Cobro anulado');
+      verCuenta(c);
+    }).catch(function (e) {
+      boton.disabled = false; boton.textContent = 'anular';
+      toast(msg(e), true);
+    });
+  });
 }
 
 // ============================================================
@@ -1528,8 +1571,9 @@ function renderCaja(r) {
  *  planilla, alcanza con sacarla de la cola local. Si ya estaba, se encola
  *  la anulación real para la planilla. */
 function anularVentaLocal(id) {
-  confirmar('¿Anular la venta ' + id + '? Se repone el stock.', { si: 'Anular', peligro: true }).then(function (ok) {
+  return confirmar('¿Anular la venta ' + id + '? Se repone el stock.', { si: 'Anular', peligro: true }).then(function (ok) {
     if (ok) _anularVentaLocal(id);
+    return ok;
   });
 }
 function _anularVentaLocal(id) {
@@ -1568,8 +1612,9 @@ function _anularVentaLocal(id) {
  *  planilla, alcanza con sacarlo de la cola local. Si ya estaba, se encola
  *  la anulación real para la planilla. */
 function anularPagoLocal(id) {
-  confirmar('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.', { si: 'Anular', peligro: true }).then(function (ok) {
+  return confirmar('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.', { si: 'Anular', peligro: true }).then(function (ok) {
     if (ok) _anularPagoLocal(id);
+    return ok;
   });
 }
 function _anularPagoLocal(id) {
