@@ -156,6 +156,36 @@ input, select, textarea {
 .fila-detalle .anulada { text-decoration: line-through; color: var(--gris); }
 .mini-btn { background: none; border: 1px solid var(--borde); border-radius: 8px; padding: 4px 8px; font-size: 13px; color: var(--rojo); }
 
+/* ---------- Historial de ventas ---------- */
+.hist-volver { text-align: left; justify-content: flex-start; margin: 0 0 4px; padding-left: 0; }
+.hist-titulo { margin: 0 0 10px; }
+.hist-atajos { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 10px; }
+.chip {
+  border: 1px solid var(--borde); background: #fff; color: #202124; border-radius: 999px;
+  padding: 8px 12px; font-size: 14px; font-weight: 600; cursor: pointer;
+}
+.chip.sel { border-color: var(--azul); background: #e8f0fe; color: var(--azul); }
+.hist-fechas { display: grid; grid-template-columns: 1fr 1fr auto; gap: 8px; align-items: end; margin-bottom: 12px; }
+.hist-fechas label { font-size: 13px; color: var(--gris); display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.hist-fechas input { padding: 10px 6px; font-size: 15px; min-width: 0; }
+.hist-aviso {
+  background: #e8f0fe; color: #174ea6; border: 1px solid #1a73e855; border-radius: 10px;
+  padding: 9px 12px; font-size: 14px; margin-bottom: 10px;
+}
+.hist-aviso.error { background: #fce8e6; color: var(--rojo); border-color: #d9302555; }
+#histDetalle h4 { margin: 16px 0 6px; color: var(--gris); font-size: 14px; text-transform: uppercase; }
+.fila-detalle.tocable { cursor: pointer; }
+.fila-detalle.tocable:active { filter: brightness(0.95); }
+.fila-detalle.es-anulada { background: #f8f9fa; }
+.fila-detalle.es-anulada .monto { text-decoration: line-through; color: var(--gris); }
+.etq { display: inline-block; font-size: 11px; font-weight: 700; border-radius: 6px; padding: 1px 6px; margin-left: 4px; vertical-align: middle; }
+.etq.anulada { background: #fce8e6; color: var(--rojo); }
+.etq.pend { background: #fef7e0; color: #b06000; }
+.fila-detalle .sub-linea { display: block; color: var(--gris); font-size: 13px; }
+.tabla-items { width: 100%; border-collapse: collapse; font-size: 15px; margin: 8px 0; }
+.tabla-items td { padding: 6px 4px; border-bottom: 1px solid var(--borde); vertical-align: top; }
+.tabla-items td.num { text-align: right; white-space: nowrap; }
+
 /* ---------- Tabbar ---------- */
 #tabbar {
   position: fixed; bottom: 0; left: 0; right: 0; z-index: 30;
@@ -201,3 +231,8 @@ input, select, textarea {
   font-size: 15px; max-width: 90%; text-align: center;
 }
 .toast.error { background: var(--rojo); }
+
+/* ---------- Confirmación propia (reemplaza confirm() del navegador) ---------- */
+.overlay-confirmar { z-index: 60; align-items: center; padding: 16px; }
+.modal.confirmar { border-radius: 18px; }
+.modal.confirmar p { font-size: 17px; line-height: 1.4; margin: 0 0 16px; }

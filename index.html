@@ -83,10 +83,31 @@
           <button id="btnIngreso" class="btn chico">+ Ingreso</button>
           <button id="btnEgreso" class="btn chico">– Egreso / gasto</button>
         </div>
+        <button id="btnHistorial" class="btn ancho">📊 Historial de ventas (elegir fechas)</button>
         <div id="cajaDetalle"></div>
         <button id="btnCajaServidor" class="btn texto" style="margin-top:14px">🔄 Ver total en la planilla (todos los teléfonos)</button>
         <button id="btnExportLog" class="btn texto">📋 Exportar log de diagnóstico</button>
         <button id="btnConfig" class="btn texto">⚙️ Cambiar dirección del servidor</button>
+      </section>
+      <!-- HISTORIAL DE VENTAS (se entra desde Caja) -->
+      <section id="scr-historial" class="screen">
+        <button id="btnHistVolver" class="btn texto hist-volver">← Volver a Caja</button>
+        <h3 class="hist-titulo">Historial de ventas</h3>
+        <div class="hist-atajos">
+          <button class="chip" data-rango="hoy">Hoy</button>
+          <button class="chip" data-rango="ayer">Ayer</button>
+          <button class="chip" data-rango="7dias">Últimos 7 días</button>
+          <button class="chip" data-rango="mes">Este mes</button>
+          <button class="chip" data-rango="mespasado">Mes pasado</button>
+        </div>
+        <div class="hist-fechas">
+          <label>Desde<input id="histDesde" type="date"></label>
+          <label>Hasta<input id="histHasta" type="date"></label>
+          <button id="btnHistVer" class="btn primario">Ver</button>
+        </div>
+        <div id="histAviso"></div>
+        <div id="histResumen" class="caja-resumen"></div>
+        <div id="histDetalle"></div>
       </section>
     </main>
 

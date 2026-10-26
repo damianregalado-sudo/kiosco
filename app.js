@@ -5,7 +5,7 @@
 
 // Tiene que ser IGUAL a VERSION en Codigo.gs. Subir los dos juntos cuando
 // se cambia el backend: si no coinciden, la app avisa sola.
-var APP_VERSION = 'v12-robustez-logs-2026-09-23';
+var APP_VERSION = 'v13-historial-ventas-2026-10-26';
 var backendVersion = null; // se completa al conectar con la planilla
 
 var DATA = { nombre_kiosco: 'Kiosco', moneda: '$', vendedores: [], productos: [], clientes: [] };
@@ -171,6 +171,8 @@ function call(fn) {
     case 'buscarProducto':      return api('buscarProducto', { codigo: a[0] }, 'GET');
     case 'anularVenta':         return api('anularVenta', { id_venta: a[0] }, 'POST');
     case 'getCaja':             return api('caja', { fecha: a[0] }, 'GET');
+    case 'getHistorial':        return api('historial', { desde: a[0], hasta: a[1] }, 'GET');
+    case 'getItemsVenta':       return api('ventaItems', { id_venta: a[0] }, 'GET');
     case 'getCuentaCliente':    return api('cuenta', { id_cliente: a[0] }, 'GET');
     default: return Promise.reject(new Error('Función desconocida: ' + fn));
   }
@@ -388,18 +390,24 @@ function verEstadoSync() {
   $('#vsReintentar').addEventListener('click', function () { cerrarModal(); toast('Reintentando…'); programarSync(200); });
   $all('[data-descartar]').forEach(function (b) {
     b.addEventListener('click', function () {
-      if (!confirm('¿Descartar este cambio pendiente?\n\nPuede quedar una diferencia entre el teléfono y la planilla. Solo hacelo si Damian te lo indica.')) return;
-      guardarCola(cola().filter(function (o) { return o.id !== b.dataset.descartar; }));
-      cerrarModal();
-      toast('Descartado');
+      confirmar('¿Descartar este cambio pendiente?\n\nPuede quedar una diferencia entre el teléfono y la planilla. Solo hacelo si Damian te lo indica.', { si: 'Descartar', peligro: true }).then(function (ok) {
+        if (!ok) return;
+        guardarCola(cola().filter(function (o) { return o.id !== b.dataset.descartar; }));
+        cerrarModal();
+        toast('Descartado');
+      });
     });
   });
 }
 
 // ---------- RESET de datos (conserva productos) ----------
 function resetDatos() {
-  if (!confirm('Se van a borrar TODOS los clientes, ventas, pagos y movimientos de la planilla.\nLos productos se mantienen.\n\n¿Estás seguro/a?')) return;
-  if (!confirm('ULTIMA OPORTUNIDAD: esto NO se puede deshacer.\n¿Continuar con el reset?')) return;
+  confirmar('Se van a borrar TODOS los clientes, ventas, pagos y movimientos de la planilla.\nLos productos se mantienen.\n\n¿Estás seguro/a?', { si: 'Sí, borrar', peligro: true }).then(function (ok) {
+    if (!ok) return false;
+    return confirmar('ULTIMA OPORTUNIDAD: esto NO se puede deshacer.\n¿Continuar con el reset?', { si: 'Borrar todo', peligro: true });
+  }).then(function (ok) { if (ok) _resetDatos(); });
+}
+function _resetDatos() {
 
   toast('Reseteando datos en la planilla…');
   api('resetDatos', {}, 'POST').then(function () {
@@ -621,7 +629,8 @@ function iniciarApp() {
   $('#buscarProd').addEventListener('input', buscarEnVender);
   $('#btnCobrar').addEventListener('click', abrirCobro);
   $('#btnVaciar').addEventListener('click', function () {
-    if (cart.length && confirm('¿Vaciar el carrito?')) { cart = []; renderCarrito(); }
+    if (!cart.length) return;
+    confirmar('¿Vaciar el carrito?', { si: 'Vaciar' }).then(function (ok) { if (ok) { cart = []; renderCarrito(); } });
   });
 
   $('#btnNuevoProd').addEventListener('click', function () { formProducto(null); });
@@ -633,11 +642,13 @@ function iniciarApp() {
   $('#btnIngreso').addEventListener('click', function () { formMovimiento('ingreso'); });
   $('#btnEgreso').addEventListener('click', function () { formMovimiento('egreso'); });
   $('#btnCajaServidor').addEventListener('click', verCajaServidor);
+  iniciarHistorial();
   $('#btnConfig').addEventListener('click', function () {
-    if (confirm('¿Cambiar la conexión con el servidor? Vas a tener que pegar la dirección y la clave de nuevo.')) {
+    confirmar('¿Cambiar la conexión con el servidor? Vas a tener que pegar la dirección y la clave de nuevo.', { si: 'Cambiar' }).then(function (ok) {
+      if (!ok) return;
       try { localStorage.removeItem('kiosco_api_url'); localStorage.removeItem('kiosco_token'); } catch (e) {}
       location.reload();
-    }
+    });
   });
   $('#btnExportLog').addEventListener('click', exportarLog);
 
@@ -658,7 +669,9 @@ function iniciarApp() {
 function mostrar(scr) {
   $all('.screen').forEach(function (s) { s.classList.remove('activa'); });
   $('#scr-' + scr).classList.add('activa');
-  $all('#tabbar .tab').forEach(function (t) { t.classList.toggle('activa', t.dataset.scr === scr); });
+  // El historial se abre desde Caja: dejamos marcada la pestaña Caja.
+  var tabScr = scr === 'historial' ? 'caja' : scr;
+  $all('#tabbar .tab').forEach(function (t) { t.classList.toggle('activa', t.dataset.scr === tabScr); });
   if (scr !== 'vender' && escaneando) pararEscaner();
   window.scrollTo(0, 0);
 }
@@ -820,10 +833,11 @@ function agregarPorCodigo(codigo) {
   if (p) { agregarAlCarrito(p); return; }
 
   toast('Código ' + codigo + ' sin cargar.');
-  if (confirm('El producto ' + codigo + ' no está cargado. ¿Cargarlo ahora?')) {
+  confirmar('El producto ' + codigo + ' no está cargado. ¿Cargarlo ahora?', { si: 'Cargar' }).then(function (ok) {
+    if (!ok) return;
     mostrar('productos');
     formProducto({ codigo: codigo });
-  }
+  });
 }
 
 function agregarAlCarrito(p) {
@@ -1134,13 +1148,15 @@ function formProducto(p) {
   function ponerCodigo(cod) { $('#pCodigo').value = cod; toast('Código: ' + cod); }
   var pel = $('#pEliminar');
   if (pel) pel.addEventListener('click', function () {
-    if (!confirm('¿Eliminar "' + p.nombre + '" de la lista?\n\nLas ventas viejas de este producto NO se tocan. Si solo querés dejar de venderlo, destildá "Se vende" en vez de borrarlo.')) return;
-    DATA.productos = DATA.productos.filter(function (x) { return x.codigo !== p.codigo; });
-    renderProductos();
-    encolar('eliminarProducto', { codigo: p.codigo });
-    LOG('producto_eliminado', { codigo: p.codigo, nombre: p.nombre });
-    cerrarModal();
-    toast('Producto eliminado');
+    confirmar('¿Eliminar "' + p.nombre + '" de la lista?\n\nLas ventas viejas de este producto NO se tocan. Si solo querés dejar de venderlo, destildá "Se vende" en vez de borrarlo.', { si: 'Eliminar', peligro: true }).then(function (ok) {
+      if (!ok) return;
+      DATA.productos = DATA.productos.filter(function (x) { return x.codigo !== p.codigo; });
+      renderProductos();
+      encolar('eliminarProducto', { codigo: p.codigo });
+      LOG('producto_eliminado', { codigo: p.codigo, nombre: p.nombre });
+      cerrarModal();
+      toast('Producto eliminado');
+    });
   });
   var pe = $('#pEscanear');
   if (pe) pe.addEventListener('click', function () { escanearUnaVez(ponerCodigo); });
@@ -1343,13 +1359,15 @@ function verCuenta(c) {
     $('#vcEditar').addEventListener('click', function () { formCliente(c); });
     var btnElim = $('#vcEliminar');
     if (btnElim) btnElim.addEventListener('click', function () {
-      if (!confirm('¿Eliminar a ' + c.nombre + '? Esta acción no se puede deshacer.')) return;
-      _eliminarClienteLocal(c);
+      confirmar('¿Eliminar a ' + c.nombre + '? Esta acción no se puede deshacer.', { si: 'Eliminar', peligro: true }).then(function (ok) {
+        if (ok) _eliminarClienteLocal(c);
+      });
     });
     var btnDesact = $('#vcDesactivar');
     if (btnDesact) btnDesact.addEventListener('click', function () {
-      if (!confirm(c.nombre + ' tiene deuda (' + money(c.saldo) + '). No se puede eliminar.\n\nSe va a desactivar: no va a aparecer para ventas nuevas a cuenta, pero sigue en la lista para cobrarle la deuda.\n\nCuando pague toda la deuda, se elimina solo.\n\n¿Desactivar?')) return;
-      _desactivarClienteLocal(c);
+      confirmar(c.nombre + ' tiene deuda (' + money(c.saldo) + '). No se puede eliminar.\n\nSe va a desactivar: no va a aparecer para ventas nuevas a cuenta, pero sigue en la lista para cobrarle la deuda.\n\nCuando pague toda la deuda, se elimina solo.\n\n¿Desactivar?', { si: 'Desactivar', peligro: true }).then(function (ok) {
+        if (ok) _desactivarClienteLocal(c);
+      });
     });
   }).catch(function (e) { toast(msg(e), true); });
 }
@@ -1475,13 +1493,16 @@ function renderCaja(r) {
     b.addEventListener('click', function () {
       var id = b.dataset.anular;
       if (r.local) { anularVentaLocal(id); return; }
-      if (!confirm('¿Anular la venta ' + id + '? Se repone el stock.')) return;
-      call('anularVenta', id).then(function (rr) {
-        DATA.productos = rr.productos; DATA.clientes = rr.clientes;
-        renderProductos(); renderClientes();
-        verCaja();
-        toast('Venta anulada');
-      }).catch(function (e) { toast(msg(e), true); });
+      confirmar('¿Anular la venta ' + id + '? Se repone el stock.', { si: 'Anular', peligro: true }).then(function (ok) {
+        if (!ok) return;
+        LOG('anular_venta_planilla', { id: id });
+        call('anularVenta', id).then(function (rr) {
+          DATA.productos = rr.productos; DATA.clientes = rr.clientes;
+          renderProductos(); renderClientes();
+          verCaja();
+          toast('Venta anulada');
+        }).catch(function (e) { toast(msg(e), true); });
+      });
     });
   });
 
@@ -1489,13 +1510,16 @@ function renderCaja(r) {
     b.addEventListener('click', function () {
       var id = b.dataset.anularPago;
       if (r.local) { anularPagoLocal(id); return; }
-      if (!confirm('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.')) return;
-      call('anularPago', id).then(function (rr) {
-        DATA.clientes = rr.clientes;
-        renderClientes();
-        verCaja();
-        toast('Cobro anulado');
-      }).catch(function (e) { toast(msg(e), true); });
+      confirmar('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.', { si: 'Anular', peligro: true }).then(function (ok) {
+        if (!ok) return;
+        LOG('anular_pago_planilla', { id: id });
+        call('anularPago', id).then(function (rr) {
+          DATA.clientes = rr.clientes;
+          renderClientes();
+          verCaja();
+          toast('Cobro anulado');
+        }).catch(function (e) { toast(msg(e), true); });
+      });
     });
   });
 }
@@ -1504,7 +1528,11 @@ function renderCaja(r) {
  *  planilla, alcanza con sacarla de la cola local. Si ya estaba, se encola
  *  la anulación real para la planilla. */
 function anularVentaLocal(id) {
-  if (!confirm('¿Anular la venta ' + id + '? Se repone el stock.')) return;
+  confirmar('¿Anular la venta ' + id + '? Se repone el stock.', { si: 'Anular', peligro: true }).then(function (ok) {
+    if (ok) _anularVentaLocal(id);
+  });
+}
+function _anularVentaLocal(id) {
   var fecha = hoyISO();
   var l = ledgerDia(fecha);
   var entry = l.find(function (x) { return x.tipo === 'venta' && x.id === id; });
@@ -1540,7 +1568,11 @@ function anularVentaLocal(id) {
  *  planilla, alcanza con sacarlo de la cola local. Si ya estaba, se encola
  *  la anulación real para la planilla. */
 function anularPagoLocal(id) {
-  if (!confirm('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.')) return;
+  confirmar('¿Anular el cobro ' + id + '? Se le vuelve a cargar la deuda al cliente.', { si: 'Anular', peligro: true }).then(function (ok) {
+    if (ok) _anularPagoLocal(id);
+  });
+}
+function _anularPagoLocal(id) {
   var fecha = hoyISO();
   var l = ledgerDia(fecha);
   var entry = l.find(function (x) { return x.tipo === 'pago' && x.id === id; });
@@ -1599,6 +1631,328 @@ function formMovimiento(tipo) {
 }
 
 // ============================================================
+//  HISTORIAL DE VENTAS POR PERÍODO
+// ============================================================
+// Las ventas salen de la planilla (todos los teléfonos). A eso se le suman
+// las ventas de ESTE teléfono que todavía no se subieron (están en la cola),
+// marcadas con "sin subir".
+
+var HIST_PAGINA = 150;   // cuántas ventas se dibujan por tanda
+var histUltimo = null;   // último resultado mostrado (para el detalle)
+var histPedido = 0;      // para descartar respuestas viejas si se tocan atajos rápido
+
+function isoLocal(d) {
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
+}
+function horaLocal(d) {
+  return String(d.getHours()).padStart(2, '0') + ':' + String(d.getMinutes()).padStart(2, '0');
+}
+function fechaCorta(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) : ''; }
+function fechaLarga(iso) { return iso ? iso.slice(8, 10) + '/' + iso.slice(5, 7) + '/' + iso.slice(0, 4) : ''; }
+
+/** Devuelve [desde, hasta] (AAAA-MM-DD) para cada atajo. */
+function rangoAtajo(nombre, hoy) {
+  hoy = hoy || new Date();
+  var y = hoy.getFullYear(), m = hoy.getMonth(), d = hoy.getDate();
+  switch (nombre) {
+    case 'hoy':       return [isoLocal(hoy), isoLocal(hoy)];
+    case 'ayer':      var a = new Date(y, m, d - 1); return [isoLocal(a), isoLocal(a)];
+    case '7dias':     return [isoLocal(new Date(y, m, d - 6)), isoLocal(hoy)];
+    case 'mes':       return [isoLocal(new Date(y, m, 1)), isoLocal(hoy)];
+    case 'mespasado': return [isoLocal(new Date(y, m - 1, 1)), isoLocal(new Date(y, m, 0))];
+  }
+  return [isoLocal(hoy), isoLocal(hoy)];
+}
+
+function iniciarHistorial() {
+  $('#btnHistorial').addEventListener('click', function () {
+    mostrar('historial');
+    if (!$('#histDesde').value) aplicarAtajo('hoy');
+    else verHistorial();
+  });
+  $('#btnHistVolver').addEventListener('click', function () { mostrar('caja'); verCaja(); });
+  $all('.hist-atajos .chip').forEach(function (b) {
+    b.addEventListener('click', function () { aplicarAtajo(b.dataset.rango); });
+  });
+  $('#btnHistVer').addEventListener('click', function () {
+    $all('.hist-atajos .chip').forEach(function (c) { c.classList.remove('sel'); });
+    verHistorial();
+  });
+}
+
+function aplicarAtajo(nombre) {
+  var r = rangoAtajo(nombre);
+  $('#histDesde').value = r[0];
+  $('#histHasta').value = r[1];
+  $all('.hist-atajos .chip').forEach(function (c) { c.classList.toggle('sel', c.dataset.rango === nombre); });
+  verHistorial();
+}
+
+/** Ventas de ESTE teléfono que siguen en la cola (no llegaron a la planilla). */
+function ventasPendientesLocales(desde, hasta) {
+  var mapa = mapaIds();
+  var out = [];
+  cola().forEach(function (op) {
+    if (op.accion !== 'registrarVenta') return;
+    var d = op.datos || {};
+    var cuando = new Date(op.creado || Date.now());
+    var fecha = isoLocal(cuando);
+    if (fecha < desde || fecha > hasta) return;
+    var calc = calcularVenta(d.items || []);
+    var forma = d.forma_pago === 'cuenta' ? 'cuenta' : 'efectivo';
+    var cliente = '';
+    if (forma === 'cuenta' && d.id_cliente) {
+      var idReal = mapa.clientes[d.id_cliente] || d.id_cliente;
+      var c = DATA.clientes.find(function (x) { return x.id === idReal || x.id === d.id_cliente; });
+      cliente = c ? c.nombre : '';
+    }
+    out.push({
+      id_venta: d.idLocal || op.id,
+      fecha: fecha,
+      hora: horaLocal(cuando),
+      vendedor: d.vendedor || '',
+      total: d._totalEstimado != null ? numJS(d._totalEstimado) : calc.total,
+      forma_pago: forma,
+      cliente: cliente,
+      anulada: false,
+      idLocal: d.idLocal || '',
+      items: calc.detalle.map(function (l) {
+        return { codigo: l.codigo, nombre: l.nombre, cantidad: l.cantidad, precio_unit: l.precio, subtotal: l.subtotal };
+      }),
+      _pendiente: true
+    });
+  });
+  return out;
+}
+
+/** Junta lo de la planilla con lo pendiente de este teléfono (sin duplicar). */
+function combinarHistorial(server, pendientes) {
+  var ventas = (server && server.ventas) ? server.ventas.slice() : [];
+  var yaEnPlanilla = {};
+  ventas.forEach(function (v) { if (v.idLocal) yaEnPlanilla[v.idLocal] = true; });
+
+  // Anulaciones hechas en este teléfono que todavía no se subieron
+  var anulPend = {};
+  cola().forEach(function (op) {
+    if (op.accion === 'anularVenta' && op.datos) anulPend[op.datos.id_venta || op.datos.idVenta] = true;
+  });
+  ventas = ventas.map(function (v) {
+    if (!v.anulada && anulPend[v.id_venta]) return Object.assign({}, v, { anulada: true, _anulPendiente: true });
+    return v;
+  });
+
+  pendientes.forEach(function (p) {
+    if (p.idLocal && yaEnPlanilla[p.idLocal]) return; // ya subió mientras consultábamos
+    ventas.push(p);
+  });
+  ventas.sort(function (a, b) {
+    var ka = a.fecha + ' ' + a.hora, kb = b.fecha + ' ' + b.hora;
+    if (ka === kb) return 0;
+    return ka < kb ? 1 : -1;
+  });
+  return ventas;
+}
+
+/** Totales del período (misma cuenta que _resumirVentas del backend). */
+function resumirHistorial(lista) {
+  var r = {
+    total_vendido: 0, cantidad_ventas: 0, cantidad_anuladas: 0, total_anulado: 0,
+    cantidad_pendientes: 0,
+    por_forma_pago: { efectivo: { cantidad: 0, total: 0 }, cuenta: { cantidad: 0, total: 0 } },
+    por_vendedor: [], por_dia: []
+  };
+  var vend = {}, dias = {};
+  lista.forEach(function (v) {
+    if (v._pendiente) r.cantidad_pendientes++;
+    if (v.anulada) { r.cantidad_anuladas++; r.total_anulado += v.total; return; }
+    r.cantidad_ventas++;
+    r.total_vendido += v.total;
+    var fp = r.por_forma_pago[v.forma_pago] || (r.por_forma_pago[v.forma_pago] = { cantidad: 0, total: 0 });
+    fp.cantidad++; fp.total += v.total;
+    var nv = v.vendedor || '(sin nombre)';
+    var x = vend[nv] || (vend[nv] = { vendedor: nv, cantidad: 0, total: 0 });
+    x.cantidad++; x.total += v.total;
+    var d = dias[v.fecha] || (dias[v.fecha] = { fecha: v.fecha, cantidad: 0, total: 0 });
+    d.cantidad++; d.total += v.total;
+  });
+  r.total_vendido = round2(r.total_vendido);
+  r.total_anulado = round2(r.total_anulado);
+  Object.keys(r.por_forma_pago).forEach(function (k) { r.por_forma_pago[k].total = round2(r.por_forma_pago[k].total); });
+  r.por_vendedor = Object.keys(vend).map(function (k) { vend[k].total = round2(vend[k].total); return vend[k]; })
+    .sort(function (a, b) { return b.total - a.total; });
+  r.por_dia = Object.keys(dias).sort().reverse().map(function (k) { dias[k].total = round2(dias[k].total); return dias[k]; });
+  return r;
+}
+
+function verHistorial() {
+  var desde = $('#histDesde').value, hasta = $('#histHasta').value;
+  if (!desde && !hasta) { var h = rangoAtajo('hoy'); desde = h[0]; hasta = h[1]; }
+  if (!desde) desde = hasta;
+  if (!hasta) hasta = desde;
+  if (desde > hasta) { var t = desde; desde = hasta; hasta = t; }
+  $('#histDesde').value = desde; $('#histHasta').value = hasta;
+
+  var nro = ++histPedido;
+  var btn = $('#btnHistVer');
+  cargando(btn, true, 'Buscando');
+  $('#histAviso').innerHTML = '';
+  $('#histResumen').innerHTML = '<p style="grid-column:1/-1;color:#5f6368">Buscando ventas en la planilla… (puede tardar unos segundos)</p>';
+  $('#histDetalle').innerHTML = '';
+
+  call('getHistorial', desde, hasta).then(function (r) {
+    if (nro !== histPedido) return;
+    cargando(btn, false);
+    renderHistorial(desde, hasta, r, null);
+  }).catch(function (e) {
+    if (nro !== histPedido) return;
+    cargando(btn, false);
+    LOG('historial_error', { desde: desde, hasta: hasta, error: msg(e) });
+    renderHistorial(desde, hasta, null, msg(e));
+  });
+}
+
+function renderHistorial(desde, hasta, server, error) {
+  var pendientes = ventasPendientesLocales(desde, hasta);
+  var ventas = combinarHistorial(server, pendientes);
+  var s = resumirHistorial(ventas);
+  histUltimo = { desde: desde, hasta: hasta, ventas: ventas, mostradas: 0 };
+
+  // Avisos
+  var aviso = '';
+  if (error) {
+    aviso += '<div class="hist-aviso error">No se pudo consultar la planilla: ' + esc(error) +
+      (pendientes.length ? '<br>Abajo solo se ve lo de <b>este teléfono</b> que todavía no se subió.' : '') + '</div>';
+  }
+  var totalPend = cola().filter(function (o) { return o.accion === 'registrarVenta'; }).length;
+  if (s.cantidad_pendientes) {
+    aviso += '<div class="hist-aviso">⏳ Hay <b>' + s.cantidad_pendientes + '</b> venta(s) de este teléfono que todavía no llegaron a la planilla. ' +
+      'Ya están sumadas acá y aparecen marcadas como <b>sin subir</b>; se suben solas.</div>';
+  } else if (totalPend) {
+    aviso += '<div class="hist-aviso">⏳ Este teléfono tiene ' + totalPend + ' venta(s) sin subir, pero son de otras fechas.</div>';
+  }
+  $('#histAviso').innerHTML = aviso;
+
+  var titulo = desde === hasta ? fechaLarga(desde) : (fechaLarga(desde) + ' al ' + fechaLarga(hasta));
+  if (error && !pendientes.length) { $('#histResumen').innerHTML = ''; $('#histDetalle').innerHTML = ''; return; }
+
+  var fpE = s.por_forma_pago.efectivo, fpC = s.por_forma_pago.cuenta;
+  $('#histResumen').innerHTML =
+    '<div class="celda destacada"><small>Total vendido · ' + esc(titulo) + '</small><b>' + money(s.total_vendido) + '</b></div>' +
+    celda('Cantidad de ventas', String(s.cantidad_ventas)) +
+    celda('Promedio por venta', money(s.cantidad_ventas ? round2(s.total_vendido / s.cantidad_ventas) : 0)) +
+    celda('En efectivo', money(fpE.total) + ' <small style="display:inline;color:#5f6368">(' + fpE.cantidad + ')</small>') +
+    celda('Fiado / cuenta', money(fpC.total) + ' <small style="display:inline;color:#5f6368">(' + fpC.cantidad + ')</small>') +
+    (s.cantidad_anuladas
+      ? '<div class="celda" style="grid-column:1/-1"><small>Anuladas (no se suman)</small><b style="color:#5f6368">' +
+        s.cantidad_anuladas + ' · ' + money(s.total_anulado) + '</b></div>'
+      : '');
+
+  var html = '';
+  if (s.por_vendedor.length) {
+    html += '<h4>Por vendedor</h4>';
+    s.por_vendedor.forEach(function (v) {
+      html += '<div class="fila-detalle"><span>' + esc(v.vendedor) + ' · ' + v.cantidad + ' venta(s)</span><b>' + money(v.total) + '</b></div>';
+    });
+  }
+  if (s.por_dia.length > 1) {
+    html += '<h4>Por día</h4>';
+    s.por_dia.forEach(function (d) {
+      html += '<div class="fila-detalle"><span>' + fechaCorta(d.fecha) + ' · ' + d.cantidad + ' venta(s)</span><b>' + money(d.total) + '</b></div>';
+    });
+  }
+  html += '<h4>Ventas (' + ventas.length + ') — tocá una para ver qué se llevó</h4>';
+  if (!ventas.length) html += '<p style="color:#5f6368">No hay ventas en este período.</p>';
+  html += '<div id="histLista"></div><button id="btnHistMas" class="btn ancho oculto">Mostrar más</button>';
+  $('#histDetalle').innerHTML = html;
+
+  $('#btnHistMas').addEventListener('click', dibujarMasVentas);
+  $('#histLista').addEventListener('click', function (e) {
+    var f = e.target.closest ? e.target.closest('[data-hidx]') : null;
+    if (f) verDetalleVenta(histUltimo.ventas[+f.dataset.hidx]);
+  });
+  dibujarMasVentas();
+}
+
+function filaVentaHist(v, idx) {
+  var multiDia = histUltimo && histUltimo.desde !== histUltimo.hasta;
+  var medio = v.forma_pago === 'cuenta' ? ('fiado' + (v.cliente ? ' · ' + esc(v.cliente) : '')) : 'efectivo';
+  var etq = '';
+  if (v.anulada) etq += '<span class="etq anulada">ANULADA' + (v._anulPendiente ? ' ⏳' : '') + '</span>';
+  if (v._pendiente) etq += '<span class="etq pend">⏳ sin subir</span>';
+  return '<div class="fila-detalle tocable' + (v.anulada ? ' es-anulada' : '') + '" data-hidx="' + idx + '">' +
+    '<span>' + (multiDia ? fechaCorta(v.fecha) + ' ' : '') + esc(v.hora) + ' · ' + esc(v.vendedor || '(sin nombre)') + etq +
+      '<span class="sub-linea">' + medio + '</span></span>' +
+    '<b class="monto">' + money(v.total) + '</b></div>';
+}
+
+function dibujarMasVentas() {
+  if (!histUltimo) return;
+  var desde = histUltimo.mostradas;
+  var hasta = Math.min(desde + HIST_PAGINA, histUltimo.ventas.length);
+  var html = '';
+  for (var i = desde; i < hasta; i++) html += filaVentaHist(histUltimo.ventas[i], i);
+  $('#histLista').insertAdjacentHTML('beforeend', html);
+  histUltimo.mostradas = hasta;
+  var resto = histUltimo.ventas.length - hasta;
+  var b = $('#btnHistMas');
+  b.classList.toggle('oculto', resto <= 0);
+  b.textContent = 'Mostrar más (' + resto + ' restantes)';
+}
+
+function verDetalleVenta(v) {
+  if (!v) return;
+  var estado = v.anulada
+    ? '<b style="color:#d93025">ANULADA</b>' + (v._anulPendiente ? ' (la anulación todavía se está subiendo)' : '')
+    : '<b style="color:#1e8e3e">Válida</b>';
+  var cab =
+    '<h3>Venta ' + esc(v.id_venta) + (v._pendiente ? ' <span class="etq pend">⏳ sin subir</span>' : '') + '</h3>' +
+    '<div class="fila-detalle"><span>Fecha</span><b>' + fechaLarga(v.fecha) + ' ' + esc(v.hora) + '</b></div>' +
+    '<div class="fila-detalle"><span>Vendió</span><b>' + esc(v.vendedor || '(sin nombre)') + '</b></div>' +
+    '<div class="fila-detalle"><span>Medio de pago</span><b>' + (v.forma_pago === 'cuenta' ? 'Fiado / cuenta' : 'Efectivo') + '</b></div>' +
+    (v.forma_pago === 'cuenta' ? '<div class="fila-detalle"><span>Cliente</span><b>' + esc(v.cliente || '—') + '</b></div>' : '') +
+    '<div class="fila-detalle"><span>Estado</span><span>' + estado + '</span></div>';
+  var pie =
+    '<div class="total-fila" style="margin-top:8px"><span>Total</span><strong>' + money(v.total) + '</strong></div>' +
+    (v._pendiente ? '<p style="font-size:13px;color:#5f6368">Los precios de los productos de una venta sin subir son los que tiene guardados este teléfono.</p>' : '') +
+    '<button class="btn ancho" id="hvCerrar">Cerrar</button>';
+
+  function pintar(items, cargandoItems) {
+    var cuerpo;
+    if (cargandoItems) cuerpo = '<p style="color:#5f6368">Cargando productos…</p>';
+    else if (!items || !items.length) cuerpo = '<p style="color:#5f6368">No hay detalle de productos para esta venta.</p>';
+    else {
+      cuerpo = '<table class="tabla-items">' + items.map(function (it) {
+        return '<tr><td>' + esc(it.nombre || it.codigo) + '<br><small style="color:#5f6368">' + cantidadTexto(it) + ' × ' + money(it.precio_unit) + (esPorPesoItem(it) ? '/kg' : '') + '</small></td>' +
+          '<td class="num"><b>' + money(it.subtotal) + '</b></td></tr>';
+      }).join('') + '</table>';
+    }
+    abrirModal(cab + '<h4 style="margin:14px 0 4px;color:#5f6368;font-size:14px">PRODUCTOS</h4>' + cuerpo + pie);
+    $('#hvCerrar').addEventListener('click', cerrarModal);
+  }
+
+  if (v.items) { pintar(v.items, false); return; }
+  pintar(null, true);
+  call('getItemsVenta', v.id_venta).then(function (r) {
+    v.items = r.items || [];
+    if (!$('#hvCerrar')) return; // ya cerró el modal
+    pintar(v.items, false);
+  }).catch(function (e) {
+    if ($('#hvCerrar')) pintar([], false);
+    toast(msg(e), true);
+  });
+}
+
+/** "3" para unidades, "250 g" para productos por peso (cantidad en kilos). */
+function esPorPesoItem(it) {
+  var p = DATA.productos.find(function (x) { return x.codigo === it.codigo; });
+  return !!((p && p.porPeso) || String(it.codigo || '').indexOf('GRANEL-') === 0);
+}
+function cantidadTexto(it) {
+  var cant = numJS(it.cantidad);
+  return esPorPesoItem(it) ? (Math.round(cant * 1000) + ' g') : String(cant);
+}
+
+// ============================================================
 //  ESCÁNER "UNA VEZ" (alta de producto)
 // ============================================================
 function escanearUnaVez(cb) {
@@ -1626,6 +1980,33 @@ function abrirModal(html) {
   $('#overlay').classList.remove('oculto');
 }
 function cerrarModal() { $('#overlay').classList.add('oculto'); $('#modal').innerHTML = ''; }
+
+/** Confirmación propia de la app, en vez de la del navegador: Chrome deja
+ *  bloquear esas ventanitas ("no mostrar más diálogos") y desde ahí responde
+ *  "Cancelar" solo, sin mostrar nada. Va en su propia capa, encima de
+ *  cualquier modal abierto. Devuelve una promesa con true/false. */
+function confirmar(texto, opts) {
+  opts = opts || {};
+  return new Promise(function (resolver) {
+    var capa = document.createElement('div');
+    capa.className = 'overlay overlay-confirmar';
+    capa.innerHTML =
+      '<div class="modal confirmar">' +
+        '<p>' + esc(texto).replace(/\n/g, '<br>') + '</p>' +
+        '<div class="fila-botones">' +
+          '<button class="btn" data-r="no">' + esc(opts.no || 'Cancelar') + '</button>' +
+          '<button class="btn ' + (opts.peligro ? 'peligro' : 'primario') + '" data-r="si">' + esc(opts.si || 'Aceptar') + '</button>' +
+        '</div>' +
+      '</div>';
+    function fin(ok) { if (capa.parentNode) capa.parentNode.removeChild(capa); resolver(ok); }
+    capa.addEventListener('click', function (e) {
+      var b = e.target.closest('[data-r]');
+      if (b) fin(b.dataset.r === 'si');
+      else if (e.target === capa) fin(false);
+    });
+    document.body.appendChild(capa);
+  });
+}
 
 function esc(s) {
   return String(s == null ? '' : s)
