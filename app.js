@@ -170,6 +170,7 @@ function call(fn) {
     case 'getBootstrap':        return api('bootstrap', {}, 'GET');
     case 'buscarProducto':      return api('buscarProducto', { codigo: a[0] }, 'GET');
     case 'anularVenta':         return api('anularVenta', { id_venta: a[0] }, 'POST');
+    case 'anularPago':          return api('anularPago', { id_pago: a[0] }, 'POST');
     case 'getCaja':             return api('caja', { fecha: a[0] }, 'GET');
     case 'getHistorial':        return api('historial', { desde: a[0], hasta: a[1] }, 'GET');
     case 'getItemsVenta':       return api('ventaItems', { id_venta: a[0] }, 'GET');
