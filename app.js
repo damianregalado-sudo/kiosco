@@ -1278,28 +1278,53 @@ function formPago(c) {
   $('#mTodo').addEventListener('click', function () { $('#mMonto').value = c.saldo; });
   $('#mCancelar').addEventListener('click', cerrarModal);
   $('#mGuardar').addEventListener('click', function () {
-    if (this.disabled) return;
+    var btn = this;
+    if (btn.disabled) return;
     var monto = parseFloat($('#mMonto').value) || 0;
     if (monto <= 0) { toast('Poné un monto.', true); return; }
 
-    this.disabled = true;
-
-    c.saldo = round2(c.saldo - monto);
-    var idLocalPago = proximoIdLocal('P');
-    var opId = encolar('registrarPago', { id_cliente: c.id, monto: monto, vendedor: vendedor, idLocal: idLocalPago });
-    agregarLedger({ tipo: 'pago', id: idLocalPago, hora: horaAhora(), cliente: c.nombre, clienteId: c.id, monto: monto, vendedor: vendedor, synced: false, opId: opId });
-    LOG('pago', { id: idLocalPago, clienteId: c.id, cliente: c.nombre, monto: monto, vendedor: vendedor });
-
-    if (c.activo === false && c.saldo <= 0) {
-      DATA.clientes = DATA.clientes.filter(function (x) { return x.id !== c.id; });
-      toast('Pago registrado. Cliente eliminado (deuda saldada)');
-    } else {
-      toast('Pago registrado');
+    btn.disabled = true;
+    // Dos avisos antes de registrar, porque pasó más de una vez que el mismo
+    // cobro se cargó dos veces seguidas y al cliente le quedó plata a favor.
+    var repetido = ledgerDia(hoyISO()).filter(function (x) {
+      return x.tipo === 'pago' && !x.anulada && x.clienteId === c.id &&
+        Math.abs(x.monto - monto) < 0.01 && x.ts && Date.now() - x.ts < 120000;
+    }).pop();
+    var avisos = [];
+    if (repetido) {
+      var seg = Math.max(1, Math.round((Date.now() - repetido.ts) / 1000));
+      avisos.push('Ya cargaste un cobro de ' + money(monto) + ' a ' + c.nombre + ' hace ' +
+        (seg === 1 ? '1 segundo' : seg < 60 ? seg + ' segundos' : 'un minuto') + '.\n\n¿Cargar OTRO cobro igual?');
     }
-    renderClientes();
-    cerrarModal();
-    if (cajaActiva()) verCaja();
+    if (monto > c.saldo + 0.01) {
+      avisos.push(c.nombre + ' debe ' + money(Math.max(0, c.saldo)) + ' y el cobro es de ' + money(monto) +
+        '.\n\nLe van a quedar ' + money(round2(monto - Math.max(0, c.saldo))) + ' a favor. ¿Registrar igual?');
+    }
+    avisos.reduce(function (p, texto) {
+      return p.then(function (ok) { return ok && confirmar(texto, { si: 'Registrar igual', no: 'No, volver' }); });
+    }, Promise.resolve(true)).then(function (ok) {
+      if (!ok) { btn.disabled = false; return; }
+      _registrarPagoLocal(c, monto);
+    });
   });
+}
+
+function _registrarPagoLocal(c, monto) {
+  c.saldo = round2(c.saldo - monto);
+  var idLocalPago = proximoIdLocal('P');
+  var opId = encolar('registrarPago', { id_cliente: c.id, monto: monto, vendedor: vendedor, idLocal: idLocalPago });
+  agregarLedger({ tipo: 'pago', id: idLocalPago, hora: horaAhora(), ts: Date.now(), cliente: c.nombre, clienteId: c.id, monto: monto, vendedor: vendedor, synced: false, opId: opId });
+  LOG('pago', { id: idLocalPago, clienteId: c.id, cliente: c.nombre, monto: monto, vendedor: vendedor });
+
+  if (c.activo === false && c.saldo <= 0) {
+    DATA.clientes = DATA.clientes.filter(function (x) { return x.id !== c.id; });
+    toast('Pago registrado. Cliente eliminado (deuda saldada)');
+  } else {
+    toast('Pago registrado');
+  }
+  renderClientes();
+  cerrarModal();
+  if (cajaActiva()) verCaja();
 }
 
 function _eliminarClienteLocal(c) {
